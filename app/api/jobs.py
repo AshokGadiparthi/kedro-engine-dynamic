@@ -1,5 +1,8 @@
 """
 FastAPI endpoints for job management and Kedro pipeline execution
+
+FIXED: Removed prefix from router definition (will be added in main.py)
+ALL existing functionalities preserved
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -16,8 +19,10 @@ logger = logging.getLogger(__name__)
 # Initialize DB manager
 db_manager = JobManager()
 
-# Create router
-router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+# ============================================================================
+# FIXED: NO PREFIX HERE - main.py will add prefix="/api/v1/jobs"
+# ============================================================================
+router = APIRouter(tags=["jobs"])
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -76,6 +81,7 @@ class PipelineListResponse(BaseModel):
 @router.get("/health")
 def health_check():
     """Health check endpoint"""
+    logger.info("🏥 Health check requested")
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat()
@@ -89,7 +95,7 @@ def health_check():
 @router.post("/run-pipeline/{pipeline_name}", status_code=202)
 def run_pipeline(
         pipeline_name: str,
-        request: RunPipelineRequest = None
+        request: Optional[RunPipelineRequest] = None
 ):
     """
     Trigger a Kedro pipeline execution via Celery
@@ -206,6 +212,34 @@ def run_feature_engineering(request: Optional[RunPipelineRequest] = None):
     """Run feature_engineering pipeline"""
     logger.info(f"📊 API Request: Run feature_engineering pipeline")
     return run_pipeline("feature_engineering", request)
+
+
+@router.post("/feature-selection", status_code=202, tags=["features"])
+def run_feature_selection(request: Optional[RunPipelineRequest] = None):
+    """Run feature_selection pipeline"""
+    logger.info(f"📊 API Request: Run feature_selection pipeline")
+    return run_pipeline("feature_selection", request)
+
+
+@router.post("/model-training", status_code=202, tags=["models"])
+def run_model_training(request: Optional[RunPipelineRequest] = None):
+    """Run model_training pipeline"""
+    logger.info(f"📊 API Request: Run model_training pipeline")
+    return run_pipeline("model_training", request)
+
+
+@router.post("/algorithms", status_code=202, tags=["models"])
+def run_algorithms(request: Optional[RunPipelineRequest] = None):
+    """Run algorithms pipeline"""
+    logger.info(f"📊 API Request: Run algorithms pipeline")
+    return run_pipeline("algorithms", request)
+
+
+@router.post("/ensemble", status_code=202, tags=["models"])
+def run_ensemble(request: Optional[RunPipelineRequest] = None):
+    """Run ensemble pipeline"""
+    logger.info(f"📊 API Request: Run ensemble pipeline")
+    return run_pipeline("ensemble", request)
 
 
 # ============================================================================
@@ -480,3 +514,6 @@ def get_pipeline_performance():
     }
 
     return performance
+
+
+logger.info("✅ Jobs router fully initialized with ALL endpoints")
