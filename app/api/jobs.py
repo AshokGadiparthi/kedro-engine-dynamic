@@ -22,6 +22,8 @@ async def submit_job(
     """Submit a pipeline for execution (async with Celery)"""
 
     try:
+        logger.info(f"🚀 Job submission started")
+
         # Create job record
         manager = JobManager()
         job = manager.create_job(
@@ -30,20 +32,24 @@ async def submit_job(
             parameters=job_data.parameters
         )
 
-        # SEND TO CELERY (Background execution)
-        # This returns immediately, doesn't wait for pipeline
-        execute_pipeline_task.delay(
+        logger.info(f"✅ Job created: {job['id']}")
+
+        # SEND TO CELERY
+        logger.info(f"📤 Sending task to Celery...")
+
+        task = execute_pipeline_task.delay(
             job_id=job["id"],
             pipeline_name=job_data.pipeline_name,
             parameters=job_data.parameters
         )
 
-        # Return job record (status is still PENDING)
-        # Client can poll /api/v1/jobs/{id} to check status
+        logger.info(f"✅ Task sent! Task ID: {task.id}")
+        logger.info(f"   Task state: {task.state}")
+
         return job
 
     except Exception as e:
-        logger.error(f"Error submitting job: {e}")
+        logger.error(f"❌ Error submitting job: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
