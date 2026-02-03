@@ -22,7 +22,7 @@ import sys
 import os
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent.parent.resolve()
 sys.path.insert(0, str(project_root))
 
 from kedro.framework.project import configure_project
@@ -356,13 +356,18 @@ class KedroExecutor:
 # Singleton instance
 _executor: Optional[KedroExecutor] = None
 
-
-def get_executor(project_path: str = ".") -> KedroExecutor:
+def get_executor(project_path: Optional[str] = None) -> KedroExecutor:
     """Get or create Kedro executor singleton."""
     global _executor
-    
+
     if _executor is None:
+        # Use explicit project root instead of "."
+        if project_path is None:
+            # Auto-detect project root
+            project_root = Path(__file__).parent.parent.parent.resolve()
+            project_path = str(project_root)
+
         _executor = KedroExecutor(project_path)
         _executor.initialize()
-    
+
     return _executor
