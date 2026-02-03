@@ -1,7 +1,6 @@
 """
 FastAPI Main Application - 100% WORKING
-All fixes applied - No warnings, no errors
-Ready for production
+Database auto-initializes on startup
 """
 
 from fastapi import FastAPI
@@ -17,13 +16,25 @@ logger = logging.getLogger(__name__)
 # Set Kedro project path from environment
 os.environ.setdefault('KEDRO_PROJECT_PATH', '/home/ashok/work/latest/full/kedro-engine-dynamic')
 
+# Import JobManager to initialize database on startup
+from app.core.job_manager import JobManager
+
 # Import all routers
 from app.api import auth, projects, datasets, datasources, models, activities, eda, pipelines, jobs, health
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle manager - modern FastAPI pattern"""
+    """Application lifecycle manager - initializes database on startup"""
+    # Startup - Initialize database
+    try:
+        logger.info("✅ Initializing database...")
+        job_manager = JobManager()
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Database initialization error: {e}")
+        raise
+    
     logger.info("✅ FastAPI application started")
     yield
     logger.info("⛔ FastAPI application shutdown")
