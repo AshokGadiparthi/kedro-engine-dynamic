@@ -233,8 +233,8 @@ class KedroExecutor:
             logger.info(f"   Run ID: {run_id}")
             
             with KedroSession.create(
-                project_path=self.project_path.as_posix(),
-                save_on_exit=False
+                project_path=self.project_path.as_posix()
+                #save_on_exit=False
             ) as session:
                 context = session.load_context()
                 
