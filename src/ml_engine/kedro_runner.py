@@ -25,6 +25,11 @@ import os
 project_root = Path(__file__).parent.parent.parent.resolve()
 sys.path.insert(0, str(project_root))
 
+# CRITICAL: Configure Kedro at module load time (when Celery imports this)
+# This must happen BEFORE importing KedroSession
+from kedro.framework.project import configure_project
+configure_project(str(project_root))
+
 from kedro.framework.session import KedroSession
 from kedro.runner import SequentialRunner
 
@@ -76,7 +81,7 @@ class KedroExecutor:
         if not Path(self.project_path).exists():
             raise FileNotFoundError(f"Project path not found: {self.project_path}")
 
-        self._initialized = False
+        self._initialized = True  # Kedro already configured at module load
         self._context = None
 
         logger.info(f"KedroExecutor initialized with project: {self.project_path}")
@@ -89,7 +94,7 @@ class KedroExecutor:
             True if successful
         """
         try:
-            # Mark as initialized - don't call configure_project to avoid import issues
+            # Kedro is already configured at module load time
             self._initialized = True
             logger.info("✅ Kedro project initialized successfully")
             return True
