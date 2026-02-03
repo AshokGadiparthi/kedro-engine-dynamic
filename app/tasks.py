@@ -1,10 +1,14 @@
 """Celery tasks for async pipeline execution"""
 
 import logging
+from pathlib import Path
 from celery import Celery, Task
 from src.ml_engine.kedro_runner import get_executor
 from app.core.job_manager import JobManager
 from app.models.job_models import JobStatus
+
+# Get absolute project path
+PROJECT_PATH = str(Path(__file__).parent.parent.resolve())
 
 # Initialize Celery
 celery_app = Celery('ml_platform')
@@ -40,8 +44,8 @@ def execute_pipeline_task(self, job_id: str, pipeline_name: str, parameters: dic
         manager = JobManager()
         manager.update_job_status(job_id, JobStatus.RUNNING)
 
-        # Execute pipeline
-        executor = get_executor()
+        # Execute pipeline - PASS PROJECT PATH
+        executor = get_executor(PROJECT_PATH)
         result = executor.execute_pipeline(
             pipeline_name=pipeline_name,
             parameters=parameters,
@@ -83,7 +87,7 @@ def execute_pipeline_task(self, job_id: str, pipeline_name: str, parameters: dic
 @celery_app.task(name='app.tasks.check_pipeline')
 def check_pipeline_exists(pipeline_name: str):
     """Check if pipeline exists"""
-    executor = get_executor()
+    executor = get_executor(PROJECT_PATH)  # PASS PROJECT PATH
     pipelines = executor.get_available_pipelines()
     return pipeline_name in pipelines
 
@@ -92,5 +96,5 @@ def check_pipeline_exists(pipeline_name: str):
 @celery_app.task(name='app.tasks.get_pipeline_info')
 def get_pipeline_info(pipeline_name: str):
     """Get pipeline information"""
-    executor = get_executor()
+    executor = get_executor(PROJECT_PATH)  # PASS PROJECT PATH
     return executor.get_pipeline_details(pipeline_name)
