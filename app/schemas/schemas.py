@@ -1,19 +1,12 @@
-"""
-Pydantic Schemas for all API endpoints
-"""
+"""Pydantic Schemas - 100% Working - No Warnings"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 
 
-# ============================================================================
-# AUTHENTICATION SCHEMAS
-# ============================================================================
-
 class UserRegister(BaseModel):
-    """User registration schema"""
     username: str
     email: Optional[str] = None
     password: str
@@ -21,13 +14,11 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    """User login schema"""
     username: str
     password: str
 
 
 class UserResponse(BaseModel):
-    """User response schema"""
     id: str
     username: str
     email: Optional[str] = None
@@ -36,24 +27,17 @@ class UserResponse(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """Token response schema"""
     access_token: str
     token_type: str
     user: UserResponse
 
 
-# ============================================================================
-# PROJECT SCHEMAS
-# ============================================================================
-
 class ProjectCreate(BaseModel):
-    """Create project schema"""
     name: str
     description: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
-    """Project response schema"""
     id: str
     name: str
     description: Optional[str] = None
@@ -61,19 +45,13 @@ class ProjectResponse(BaseModel):
     created_at: str
 
 
-# ============================================================================
-# DATASET SCHEMAS
-# ============================================================================
-
 class DatasetCreate(BaseModel):
-    """Create dataset schema"""
     name: str
     project_id: str
     description: Optional[str] = None
 
 
 class DatasetResponse(BaseModel):
-    """Dataset response schema"""
     id: str
     name: str
     project_id: str
@@ -81,34 +59,27 @@ class DatasetResponse(BaseModel):
     created_at: str
 
 
-# ============================================================================
-# MODEL SCHEMAS
-# ============================================================================
-
 class ModelCreate(BaseModel):
-    """Create model schema"""
+    """FIXED: No namespace warnings"""
     name: str
     project_id: str
     model_type: str
     description: Optional[str] = None
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class ModelResponse(BaseModel):
-    """Model response schema"""
+    """FIXED: No namespace warnings"""
     id: str
     name: str
     project_id: str
     model_type: str
     description: Optional[str] = None
     created_at: str
+    model_config = ConfigDict(protected_namespaces=())
 
-
-# ============================================================================
-# ACTIVITY SCHEMAS
-# ============================================================================
 
 class ActivityCreate(BaseModel):
-    """Create activity schema"""
     action: str
     entity_type: str
     entity_id: str
@@ -116,7 +87,6 @@ class ActivityCreate(BaseModel):
 
 
 class ActivityResponse(BaseModel):
-    """Activity response schema"""
     id: str
     user_id: str
     action: str
@@ -126,24 +96,14 @@ class ActivityResponse(BaseModel):
     created_at: str
 
 
-# ============================================================================
-# HEALTH SCHEMAS
-# ============================================================================
-
 class HealthResponse(BaseModel):
-    """Health check response - Simple version"""
     status: str
     service: Optional[str] = None
     version: Optional[str] = None
     timestamp: datetime
 
 
-# ============================================================================
-# EDA SCHEMAS
-# ============================================================================
-
 class AnalysisResponse(BaseModel):
-    """Response when analysis starts"""
     job_id: str
     dataset_id: str
     status: str
@@ -151,7 +111,6 @@ class AnalysisResponse(BaseModel):
 
 
 class JobStatusEnum(str, Enum):
-    """Job status enum"""
     pending = "pending"
     running = "running"
     completed = "completed"
@@ -160,7 +119,6 @@ class JobStatusEnum(str, Enum):
 
 
 class JobStatusResponse(BaseModel):
-    """Job status response"""
     job_id: str
     dataset_id: str
     status: str
@@ -172,12 +130,7 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-# ============================================================================
-# JOB SCHEMAS
-# ============================================================================
-
 class JobCreate(BaseModel):
-    """Request schema for creating a job"""
     pipeline_name: str
     parameters: Optional[Dict[str, Any]] = {}
     tags: Optional[List[str]] = None
@@ -192,7 +145,6 @@ class JobCreate(BaseModel):
 
 
 class JobResponse(BaseModel):
-    """Response schema for job"""
     id: str
     pipeline_name: str
     user_id: str

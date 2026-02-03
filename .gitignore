@@ -1,44 +1,22 @@
-# Virtual environments
 venv/
 env/
-ENV/
-*.egg-info/
-
-# Python cache
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Environment variables
+*.egg-info/
 .env
 .env.local
-.env.*.local
-
-# IDE
+.DS_Store
+*.db
+*.sqlite3
+logs/
+*.log
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-tmp/
-temp/
-
-# Celery
 celerybeat-schedule
+tmp/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
