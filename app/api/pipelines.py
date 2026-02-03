@@ -11,13 +11,16 @@ import logging
 from src.ml_engine.kedro_runner import get_executor
 from app.core.auth import get_current_user
 
+# TO (for development without auth):
+from app.core.auth import get_mock_user
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/pipelines", tags=["Pipelines"])
 
 
 @router.get("", summary="List all pipelines")
-async def list_pipelines():
+async def list_pipelines(current_user: Dict = Depends(get_mock_user)):
     """Get all available Kedro pipelines"""
     try:
         executor = get_executor()
