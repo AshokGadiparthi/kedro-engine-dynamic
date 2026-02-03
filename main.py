@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Set Kedro project path from environment
 os.environ.setdefault('KEDRO_PROJECT_PATH', '/home/ashok/work/latest/full/kedro-engine-dynamic')
 
-# Import JobManager to initialize database on startup
+# Import JobManager to initialize database with ALL tables on startup
 from app.core.job_manager import JobManager
 
 # Import all routers
@@ -25,12 +25,12 @@ from app.api import auth, projects, datasets, datasources, models, activities, e
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle manager - initializes database on startup"""
-    # Startup - Initialize database
+    """Application lifecycle manager - initializes database with ALL tables on startup"""
+    # Startup - Initialize database with ALL required tables
     try:
-        logger.info("✅ Initializing database...")
+        logger.info("✅ Initializing database with ALL tables...")
         job_manager = JobManager()
-        logger.info("✅ Database initialized successfully")
+        logger.info("✅ Database initialized successfully with all tables!")
     except Exception as e:
         logger.error(f"❌ Database initialization error: {e}")
         raise
