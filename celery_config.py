@@ -48,7 +48,7 @@ class CeleryConfig:
     )
 
     task_routes = {
-        'app.tasks.execute_pipeline_task': {'queue': 'ml_pipelines'},
+        'app.tasks.execute_pipeline': {'queue': 'ml_pipelines'},
     }
 
     # Result Backend Settings
