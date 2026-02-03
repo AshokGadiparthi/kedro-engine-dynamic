@@ -1,28 +1,31 @@
-"""Celery Worker"""
+"""
+Celery Worker Configuration
+Sets up Celery to execute tasks
+"""
 
 import sys
 import os
 from pathlib import Path
-
-# Add paths
-project_root = Path(__file__).parent.resolve()
-sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root / "src"))
-
-os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
-
 from celery import Celery
 import celery_config
 
-# Create app
+# Get project root
+project_root = Path(__file__).parent.resolve()
+sys.path.insert(0, str(project_root))
+
+# Create Celery app
 app = Celery('ml_platform')
+
+# Load configuration
 app.config_from_object(celery_config.CeleryConfig)
 
-# Autodiscover tasks
+# Autodiscover tasks from app
 app.autodiscover_tasks(['app'])
 
 @app.task(bind=True)
 def debug_task(self):
+    """Debug task"""
+    print(f'Request: {self.request!r}')
     return 'Celery is working!'
 
 if __name__ == '__main__':

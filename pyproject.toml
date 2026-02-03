@@ -1,3 +1,0 @@
-[tool.kedro]
-package_name = "ml_engine"
-project_version = "0.1.0"
