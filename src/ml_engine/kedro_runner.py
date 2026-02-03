@@ -317,3 +317,4 @@ def get_executor(project_path: Optional[str] = None) -> KedroExecutor:
         _executor.initialize()
 
     return _executor
+
