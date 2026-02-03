@@ -27,7 +27,24 @@ sys.path.insert(0, str(project_root))
 
 # CRITICAL: Configure Kedro at module load time (when Celery imports this)
 # This must happen BEFORE importing KedroSession
-import os
+
+os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
+
+
+
+
+# Get project root
+project_root = Path(__file__).parent.parent.parent.resolve()
+
+# CRITICAL: Add both project root AND src to Python path
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+
+print(f"Project root: {project_root}")
+print(f"sys.path: {sys.path[:3]}")
+
+# Set environment variable
 os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
 from kedro.framework.project import configure_project
@@ -37,6 +54,9 @@ from kedro.framework.session import KedroSession
 from kedro.runner import SequentialRunner
 
 logger = logging.getLogger(__name__)
+
+
+
 
 
 class KedroIntegrationError(Exception):
