@@ -1,20 +1,12 @@
 """
 Celery Worker - 100% WORKING
-Simplified - No module import issues
+Uses celery_app.py for Celery instance
 """
 
-from celery import Celery
-from celery_config import CeleryConfig
+from celery_app import app
 
-# Create Celery app instance
-app = Celery("ml_platform")
-
-# Load configuration
-app.config_from_object(CeleryConfig)
-
-# Skip autodiscovery to avoid module import errors
-# The worker will work fine without it
-# Tasks can be registered manually if needed later
+# Import tasks to register them
+from app import tasks
 
 if __name__ == "__main__":
     app.start()
