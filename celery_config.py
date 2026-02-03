@@ -1,24 +1,22 @@
-"""Celery Configuration - 100% WORKING"""
-
+"""Celery Configuration Class"""
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class CeleryConfig:
-    """Celery configuration class"""
-    
-    # Broker and backend
-    broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
-    
-    # Serialization
-    task_serializer = "json"
-    accept_content = ["json"]
-    result_serializer = "json"
-    
-    # Timezone
-    timezone = "UTC"
+    broker_url = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    result_backend = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+    task_serializer = 'json'
+    result_serializer = 'json'
+    accept_content = ['json']
+    timezone = 'UTC'
     enable_utc = True
-    
-    # Task settings
-    task_time_limit = 30 * 60  # 30 minutes
-    task_soft_time_limit = 25 * 60  # 25 minutes
+    task_track_started = True
+    task_time_limit = 3600
+    task_soft_time_limit = 3300
+    result_expires = 3600
+    worker_max_tasks_per_child = 100
+    worker_prefetch_multiplier = 1
+    task_default_queue = 'default'
+    task_default_routing_key = 'task.default'
