@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from celery_app import app
 from kedro.framework.session import KedroSession
+from kedro.framework.project import configure_project  # FIXED: Add this import
 from kedro.runner import SequentialRunner
 from app.core.job_manager import JobManager
 
@@ -81,12 +82,16 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         logger.info(f"✅ Kedro project verified: {KEDRO_PROJECT_PATH}")
 
         # ====================================================================
-        # STEP 3: Create Kedro session (FIXED: Removed ProjectMetadata)
+        # STEP 3: Configure and Create Kedro session (FIXED)
         # ====================================================================
-        logger.info(f"\n[STEP 3] Creating Kedro session...")
+        logger.info(f"\n[STEP 3] Configuring Kedro project...")
         logger.info(f"Loading project from {KEDRO_PROJECT_PATH}")
-        logger.info(f"✅ Project path verified: {KEDRO_PROJECT_PATH}")
 
+        # FIXED: Configure project BEFORE creating session
+        configure_project(str(KEDRO_PROJECT_PATH))
+        logger.info(f"✅ Kedro project configured successfully")
+
+        logger.info(f"\nCreating Kedro session...")
         with KedroSession.create(project_path=KEDRO_PROJECT_PATH) as session:
             logger.info(f"✅ Kedro session created successfully")
 
