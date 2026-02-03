@@ -8,7 +8,7 @@ from app.tasks import execute_pipeline_task  # ← NEW IMPORT
 from app.core.job_manager import JobManager
 from app.models.job_models import JobStatus
 from app.schemas.job_schemas import JobCreate, JobResponse
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_mock_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/jobs", tags=["Jobs"])

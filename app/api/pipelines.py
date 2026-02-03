@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/pipelines", tags=["Pipelines"])
 
 
 @router.get("", summary="List all pipelines")
-async def list_pipelines(current_user: Dict = Depends(get_mock_user)):
+async def list_pipelines(current_user: Dict = Depends(get_current_user)):
     """Get all available Kedro pipelines"""
     try:
         executor = get_executor()
