@@ -3,13 +3,6 @@ Kedro Execution Engine for FastAPI Integration
 
 This module provides programmatic access to Kedro pipelines,
 enabling REST API exposure of ML workflows.
-
-Features:
-- Pipeline discovery and introspection
-- Programmatic pipeline execution
-- Parameter management
-- Output capture and storage
-- Error handling and logging
 """
 
 from pathlib import Path
@@ -21,42 +14,40 @@ import traceback
 import sys
 import os
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent.resolve()
-sys.path.insert(0, str(project_root))
+# ============================================================================
+# CRITICAL: SETUP ENVIRONMENT AND PATHS FIRST
+# ============================================================================
 
-# CRITICAL: Configure Kedro at module load time (when Celery imports this)
-# This must happen BEFORE importing KedroSession
-
+# Set package name BEFORE any Kedro imports
 os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
-
-
-
-
 
 # Get project root
 project_root = Path(__file__).parent.parent.parent.resolve()
 
-# CRITICAL: Add both project root AND src to Python path
+# Add project root to path
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-print(f"Project root: {project_root}")
-print(f"sys.path: {sys.path[:3]}")
+# Setup logging
+logger = logging.getLogger(__name__)
 
-# Set environment variable
-os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+# ============================================================================
+# NOW import Kedro (after environment is set)
+# ============================================================================
 
-from kedro.framework.project import configure_project
-configure_project(str(project_root))
+try:
+    from kedro.framework.project import configure_project
+    configure_project(str(project_root))
+    logger.info(f"✅ Kedro configured: {project_root}")
+except Exception as e:
+    logger.warning(f"⚠️  Kedro configuration warning: {e}")
 
 from kedro.framework.session import KedroSession
 from kedro.runner import SequentialRunner
 
-logger = logging.getLogger(__name__)
-
-
-
+# ============================================================================
+# EXCEPTION CLASSES
+# ============================================================================
 
 
 class KedroIntegrationError(Exception):
@@ -74,6 +65,11 @@ class PipelineExecutionError(KedroIntegrationError):
     pass
 
 
+# ============================================================================
+# MAIN EXECUTOR CLASS
+# ============================================================================
+
+
 class KedroExecutor:
     """
     Execute and manage Kedro pipelines programmatically.
@@ -87,24 +83,22 @@ class KedroExecutor:
         Initialize Kedro executor.
 
         Args:
-            project_path: Path to Kedro project root (as string)
-
-        Raises:
-            FileNotFoundError: If project path doesn't exist
+            project_path: Path to Kedro project root
         """
-        # Store as string, not Path object (to avoid serialization issues)
+        # CRITICAL: Ensure package name is always set
+        os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
         if project_path is None:
-            project_path = str(Path(__file__).parent.parent.parent.resolve())
+            project_path = str(project_root)
         else:
             project_path = str(Path(project_path).resolve())
 
         self.project_path = project_path
 
-        # Verify path exists
         if not Path(self.project_path).exists():
             raise FileNotFoundError(f"Project path not found: {self.project_path}")
 
-        self._initialized = True  # Kedro already configured at module load
+        self._initialized = True
         self._context = None
 
         logger.info(f"KedroExecutor initialized with project: {self.project_path}")
@@ -117,30 +111,26 @@ class KedroExecutor:
             True if successful
         """
         try:
-            # Kedro is already configured at module load time
             self._initialized = True
             logger.info("✅ Kedro project initialized successfully")
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Kedro project: {e}")
+            logger.error(f"❌ Failed to initialize: {e}")
             self._initialized = False
             return False
 
     def _ensure_initialized(self) -> None:
         """Verify executor is initialized."""
         if not self._initialized:
-            raise KedroIntegrationError("Executor not initialized. Call initialize() first.")
+            raise KedroIntegrationError("Executor not initialized.")
 
     def get_available_pipelines(self) -> List[str]:
-        """
-        Get all available pipeline names.
-
-        Returns:
-            List of pipeline names
-        """
+        """Get all available pipeline names."""
         self._ensure_initialized()
 
         try:
+            os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
             with KedroSession.create(project_path=self.project_path) as session:
                 context = session.load_context()
                 pipeline_names = sorted(list(context.pipelines.keys()))
@@ -151,18 +141,12 @@ class KedroExecutor:
             return []
 
     def get_pipeline_details(self, pipeline_name: str) -> Dict[str, Any]:
-        """
-        Get detailed information about a pipeline.
-
-        Args:
-            pipeline_name: Name of the pipeline
-
-        Returns:
-            Dictionary containing pipeline details
-        """
+        """Get detailed information about a pipeline."""
         self._ensure_initialized()
 
         try:
+            os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
             with KedroSession.create(project_path=self.project_path) as session:
                 context = session.load_context()
 
@@ -176,7 +160,6 @@ class KedroExecutor:
 
                 pipeline = context.pipelines[pipeline_name]
 
-                # Extract node details
                 nodes = []
                 all_tags = set()
 
@@ -207,18 +190,12 @@ class KedroExecutor:
             return {"error": str(e)}
 
     def get_pipeline_parameters(self, pipeline_name: str) -> Dict[str, Any]:
-        """
-        Get default parameters for a pipeline.
-
-        Args:
-            pipeline_name: Name of the pipeline
-
-        Returns:
-            Dictionary of parameters
-        """
+        """Get default parameters for a pipeline."""
         self._ensure_initialized()
 
         try:
+            os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
             with KedroSession.create(project_path=self.project_path) as session:
                 context = session.load_context()
 
@@ -238,18 +215,7 @@ class KedroExecutor:
             tags: Optional[List[str]] = None,
             run_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Execute a Kedro pipeline.
-
-        Args:
-            pipeline_name: Name of pipeline to execute
-            parameters: Override parameters
-            tags: Node tags to execute
-            run_id: Unique identifier for this run
-
-        Returns:
-            Dictionary with execution results
-        """
+        """Execute a Kedro pipeline."""
         self._ensure_initialized()
 
         if not run_id:
@@ -261,32 +227,29 @@ class KedroExecutor:
             logger.info(f"🚀 Starting pipeline execution: {pipeline_name}")
             logger.info(f"   Run ID: {run_id}")
 
+            # CRITICAL: Set package name before session creation
+            os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
             with KedroSession.create(project_path=self.project_path) as session:
                 context = session.load_context()
 
-                # Verify pipeline exists
                 if pipeline_name not in context.pipelines:
                     return {
                         "status": "failed",
                         "error": f"Pipeline '{pipeline_name}' not found"
                     }
 
-                # Merge parameters
                 if parameters:
                     context.params.update(parameters)
 
-                # Get pipeline
                 pipeline = context.pipelines[pipeline_name]
 
-                # Filter by tags if specified
                 if tags:
                     pipeline = pipeline.filter(*tags)
                     logger.info(f"Filtered pipeline to {len(pipeline.nodes)} nodes")
 
-                # Create runner
                 runner = SequentialRunner()
 
-                # Execute pipeline
                 logger.info(f"Executing {len(pipeline.nodes)} nodes...")
 
                 outputs = runner.run(
@@ -332,15 +295,7 @@ class KedroExecutor:
 
     @staticmethod
     def _serialize_outputs(outputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Serialize pipeline outputs to JSON-compatible format.
-
-        Args:
-            outputs: Raw pipeline outputs
-
-        Returns:
-            JSON-serializable dictionary
-        """
+        """Serialize pipeline outputs to JSON-compatible format."""
         serialized = {}
 
         for key, value in outputs.items():
@@ -350,18 +305,13 @@ class KedroExecutor:
             except (TypeError, ValueError):
                 serialized[key] = {
                     "_type": type(value).__name__,
-                    "_value": str(value)[:500]  # Limit to 500 chars
+                    "_value": str(value)[:500]
                 }
 
         return serialized
 
     def get_health_status(self) -> Dict[str, Any]:
-        """
-        Get health status of Kedro integration.
-
-        Returns:
-            Dictionary with health information
-        """
+        """Get health status of Kedro integration."""
         try:
             pipelines = self.get_available_pipelines()
 
@@ -379,26 +329,23 @@ class KedroExecutor:
             }
 
 
-# Singleton instance
+# ============================================================================
+# SINGLETON EXECUTOR
+# ============================================================================
+
 _executor: Optional[KedroExecutor] = None
 
 
 def get_executor(project_path: Optional[str] = None) -> KedroExecutor:
-    """
-    Get or create Kedro executor singleton.
-
-    Args:
-        project_path: Optional path to project (defaults to auto-detection)
-
-    Returns:
-        KedroExecutor instance
-    """
+    """Get or create Kedro executor singleton."""
     global _executor
 
+    # ALWAYS set package name
+    os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
+
     if _executor is None:
-        # Auto-detect project path if not provided
         if project_path is None:
-            project_path = str(Path(__file__).parent.parent.parent.resolve())
+            project_path = str(project_root)
 
         _executor = KedroExecutor(project_path)
         _executor.initialize()
