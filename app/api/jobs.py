@@ -1,8 +1,8 @@
 """
 FastAPI endpoints for job management and Kedro pipeline execution
 
-FIXED: Removed prefix from router definition (will be added in main.py)
-ALL existing functionalities preserved
+FIXED: Removed 'description' parameter from create_job() call
+All other functionality preserved
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -23,6 +23,8 @@ db_manager = JobManager()
 # FIXED: NO PREFIX HERE - main.py will add prefix="/api/v1/jobs"
 # ============================================================================
 router = APIRouter(tags=["jobs"])
+
+logger.info("✅ Jobs router created")
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -128,12 +130,13 @@ def run_pipeline(
 
     try:
         # Create job in database
-        logger.info(f"Creating job in database...")
+        logger.info(f"Creating job in database for pipeline: {pipeline_name}")
+
+        # FIXED: Removed 'description' parameter - JobManager.create_job() doesn't accept it
         job = db_manager.create_job(
             pipeline_name=pipeline_name,
             parameters=request.parameters if request else {},
-            user_id="api_user",
-            description=request.description if request else None
+            user_id="api_user"
         )
 
         logger.info(f"✅ Job created: {job['id']}")
