@@ -1,8 +1,5 @@
 """
-Celery Configuration - FIXED VERSION WITH CLASS
-
-COPY THIS ENTIRE FILE TO: celery_config.py
-(Save in project root, same directory as main.py)
+Celery Configuration - REDIS ONLY
 """
 
 import os
@@ -12,7 +9,7 @@ from kombu import Exchange, Queue
 class CeleryConfig:
     """Celery configuration class"""
 
-    # Broker and Backend URLs
+    # Broker and Backend URLs - REDIS ONLY
     broker_url = os.getenv(
         'CELERY_BROKER_URL',
         'redis://localhost:6379/0'
@@ -34,8 +31,8 @@ class CeleryConfig:
 
     # Task Execution Settings
     task_track_started = True
-    task_time_limit = 30 * 60  # 30 minutes hard limit
-    task_soft_time_limit = 25 * 60  # 25 minutes soft limit
+    task_time_limit = 30 * 60
+    task_soft_time_limit = 25 * 60
 
     # Worker Settings
     worker_prefetch_multiplier = 1
@@ -55,7 +52,7 @@ class CeleryConfig:
     }
 
     # Result Backend Settings
-    result_expires = 86400  # 1 day
+    result_expires = 86400
     result_extended = True
 
     # Logging
