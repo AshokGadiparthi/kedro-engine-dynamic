@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["Jobs"])
 @router.post("/api/v1/jobs", response_model=JobResponse, status_code=202)
 async def submit_job(
         job_data: JobCreate,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+        current_user: Dict[str, Any] = Depends(get_mock_user)
 ):
     """Submit a pipeline for execution (async with Celery)"""
 
@@ -50,7 +50,7 @@ async def submit_job(
 @router.get("/api/v1/jobs/{job_id}", response_model=JobResponse)
 async def get_job_status(
         job_id: str,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+        current_user: Dict[str, Any] = Depends(get_mock_user)
 ):
     """Get job status (non-blocking)"""
 

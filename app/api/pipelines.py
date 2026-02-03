@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 import logging
 
 from src.ml_engine.kedro_runner import get_executor
-from app.core.auth import get_current_user
+from app.core.auth import get_mock_user
 
 # TO (for development without auth):
 from app.core.auth import get_mock_user
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/pipelines", tags=["Pipelines"])
 
 
 @router.get("", summary="List all pipelines")
-async def list_pipelines(current_user: Dict = Depends(get_current_user)):
+async def list_pipelines(current_user: Dict = Depends(get_mock_user)):
     """Get all available Kedro pipelines"""
     try:
         executor = get_executor()
@@ -36,7 +36,7 @@ async def list_pipelines(current_user: Dict = Depends(get_current_user)):
 
 
 @router.get("/{pipeline_name}", summary="Get pipeline details")
-async def get_pipeline_details(pipeline_name: str):
+async def get_pipeline_details(pipeline_name: str, current_user: Dict = Depends(get_mock_user)):
     """Get detailed information about a specific pipeline"""
     try:
         executor = get_executor()
