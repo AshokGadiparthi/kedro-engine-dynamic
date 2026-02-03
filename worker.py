@@ -1,54 +1,61 @@
-"""Celery Worker - Set paths BEFORE any imports"""
+"""Celery Worker - Explicit Task Import"""
 
 import sys
 import os
 from pathlib import Path
 
 # ============================================================================
-# CRITICAL: Add project root to sys.path FIRST
+# CRITICAL: Add paths FIRST
 # ============================================================================
 
-# Get the directory where THIS file is located
 worker_dir = Path(__file__).parent.resolve()
-project_root = worker_dir  # worker.py is in project root
+project_root = worker_dir
 
-# Add project root to Python path
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-print(f"Worker starting from: {worker_dir}")
-print(f"Project root: {project_root}")
-print(f"sys.path[0]: {sys.path[0]}")
-
 os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
+print(f"✅ Project root: {project_root}")
+print(f"✅ sys.path[0]: {sys.path[0]}")
+
 # ============================================================================
-# NOW import Celery (after paths are set)
+# Create Celery app
 # ============================================================================
 
 from celery import Celery
 import celery_config
 
-print("✅ Imports successful")
-
-# Create Celery app
 app = Celery('ml_platform')
-
-# Load configuration
 app.config_from_object(celery_config.CeleryConfig)
 
-print("✅ Celery config loaded")
+print("✅ Celery app created")
 
-# Auto-discover tasks - THIS WILL NOW WORK
-print("🔍 Autodiscovering tasks from 'app' package...")
-app.autodiscover_tasks(['app'])
+# ============================================================================
+# EXPLICITLY IMPORT TASKS (instead of autodiscovery)
+# ============================================================================
 
-print("✅ Tasks discovered")
+try:
+    from app import tasks
+    print("✅ Tasks imported successfully!")
+    print(f"   Available tasks: {list(app.tasks.keys())}")
+except ImportError as e:
+    print(f"❌ Failed to import tasks: {e}")
+    print(f"   Trying to list app directory...")
+    app_path = project_root / "app"
+    if app_path.exists():
+        print(f"   app/ directory exists at: {app_path}")
+        print(f"   Contents: {list(app_path.iterdir())}")
+    else:
+        print(f"   ❌ app/ directory does NOT exist!")
+
+# ============================================================================
+# Debug task
+# ============================================================================
 
 @app.task(bind=True)
 def debug_task(self):
     """Debug task"""
-    print(f'Request: {self.request!r}')
     return 'Celery is working!'
 
 if __name__ == '__main__':
