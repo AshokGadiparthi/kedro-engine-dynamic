@@ -104,8 +104,7 @@ class KedroExecutor:
             os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
             with KedroSession.create(
-                    project_path=self.project_path,
-                    save_on_exit=False
+                    project_path=self.project_path
             ) as session:
                 context = session.load_context()
                 pipeline_names = sorted(list(context.pipelines.keys()))
@@ -123,8 +122,7 @@ class KedroExecutor:
             os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
             with KedroSession.create(
-                    project_path=self.project_path,
-                    save_on_exit=False
+                    project_path=self.project_path
             ) as session:
                 context = session.load_context()
 
@@ -162,8 +160,7 @@ class KedroExecutor:
             os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
             with KedroSession.create(
-                    project_path=self.project_path,
-                    save_on_exit=False
+                    project_path=self.project_path
             ) as session:
                 context = session.load_context()
 
@@ -199,8 +196,7 @@ class KedroExecutor:
             os.environ['KEDRO_PACKAGE_NAME'] = 'ml_engine'
 
             with KedroSession.create(
-                    project_path=self.project_path,
-                    save_on_exit=False
+                    project_path=self.project_path
             ) as session:
                 context = session.load_context()
 
