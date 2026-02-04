@@ -14,6 +14,19 @@ class User(Base):
     password_hash = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class Workspace(Base):
+    """Workspace model"""
+    __tablename__ = "workspaces"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, index=True)
+    slug = Column(String, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    owner_id = Column(String, index=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 class Project(Base):
     """Project model"""
     __tablename__ = "projects"
