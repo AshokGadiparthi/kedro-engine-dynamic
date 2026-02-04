@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.models import Project
 from app.schemas import ProjectCreate, ProjectResponse
 
-router = APIRouter(prefix="/api/projects", tags=["Projects"])
+router = APIRouter(prefix="", tags=["Projects"])
 
 @router.get("/", response_model=list)
 async def list_projects(db: Session = Depends(get_db)):
