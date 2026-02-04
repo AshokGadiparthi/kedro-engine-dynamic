@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.models.models import Dataset
 from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/api/eda", tags=["Phase 3 - Correlations"])
+router = APIRouter(prefix="", tags=["Phase 3 - Correlations"])
 logger = logging.getLogger(__name__)
 
 

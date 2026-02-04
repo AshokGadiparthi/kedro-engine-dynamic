@@ -1,43 +1,27 @@
-"""
-Models API Endpoints
-"""
+"""Models API Routes"""
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from uuid import uuid4
+from datetime import datetime
+from app.core.database import get_db
+from app.schemas import ModelCreate, ModelResponse
 
-from fastapi import APIRouter, HTTPException
-from app.schemas.schemas import ModelCreate, ModelResponse
-import logging
-import uuid
+router = APIRouter(prefix="", tags=["Models"])
 
-logger = logging.getLogger(__name__)
-router = APIRouter()
-
-
-@router.get("")
-async def list_models():
+@router.get("/", response_model=list)
+async def list_models(db: Session = Depends(get_db)):
     """List all models"""
-    try:
-        logger.info("📋 Listing models")
-        return []
-    except Exception as e:
-        logger.error(f"❌ Error listing models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # Return empty list for now (models table may not have full implementation)
+    return []
 
-
-@router.post("", response_model=ModelResponse)
-async def create_model(model_data: ModelCreate):
+@router.post("/", response_model=ModelResponse)
+async def create_model(model: ModelCreate, db: Session = Depends(get_db)):
     """Create new model"""
-    try:
-        logger.info(f"🆕 Creating model: {model_data.name}")
-        
-        model_id = str(uuid.uuid4())
-        
-        return ModelResponse(
-            id=model_id,
-            name=model_data.name,
-            project_id=model_data.project_id,
-            description=model_data.description,
-            model_type=model_data.model_type,
-            created_at="2026-02-03T17:30:00"
-        )
-    except Exception as e:
-        logger.error(f"❌ Error creating model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "id": str(uuid4()),
+        "name": model.name,
+        "project_id": model.project_id,
+        "description": model.description,
+        "model_type": model.model_type,
+        "created_at": datetime.now().isoformat()
+    }
