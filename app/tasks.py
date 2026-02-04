@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from celery_app import app
 from app.core.job_manager import JobManager
+import sys
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -130,11 +131,8 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         logger.info(f"\n[STEP 4] Executing pipeline via subprocess...")
 
         # Build Kedro command
-        cmd = [
-            'kedro',
-            'run',
-            '--pipeline', pipeline_name,
-        ]
+        python_exe = sys.executable
+        cmd = [python_exe, '-m', 'kedro', 'run', '--pipeline', pipeline_name]
 
         # Add parameters if provided
         if extra_params:
