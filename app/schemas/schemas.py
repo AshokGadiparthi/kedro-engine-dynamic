@@ -31,6 +31,9 @@ class TokenResponse(BaseModel):
     token_type: str
     user: UserResponse
 
+class TokenRefresh(BaseModel):
+    """Token refresh schema"""
+    refresh_token: str
 
 class ProjectCreate(BaseModel):
     name: str
