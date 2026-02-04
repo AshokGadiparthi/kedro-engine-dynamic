@@ -1,42 +1,47 @@
-"""
-Projects API Endpoints
-"""
+"""Projects API Routes"""
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from uuid import uuid4
+from datetime import datetime
+from app.core.database import get_db
+from app.models.models import Project
+from app.schemas import ProjectCreate, ProjectResponse
 
-from fastapi import APIRouter, HTTPException
-from app.schemas.schemas import ProjectCreate, ProjectResponse
-import logging
-import uuid
+router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
-logger = logging.getLogger(__name__)
-router = APIRouter()
-
-
-@router.get("")
-async def list_projects():
+@router.get("/", response_model=list)
+async def list_projects(db: Session = Depends(get_db)):
     """List all projects"""
-    try:
-        logger.info("📋 Listing projects")
-        return []
-    except Exception as e:
-        logger.error(f"❌ Error listing projects: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    projects = db.query(Project).all()
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "owner_id": p.owner_id,
+            "created_at": p.created_at.isoformat() if p.created_at else ""
+        }
+        for p in projects
+    ]
 
-
-@router.post("", response_model=ProjectResponse)
-async def create_project(project_data: ProjectCreate):
+@router.post("/", response_model=ProjectResponse)
+async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     """Create new project"""
-    try:
-        logger.info(f"🆕 Creating project: {project_data.name}")
-        
-        project_id = str(uuid.uuid4())
-        
-        return ProjectResponse(
-            id=project_id,
-            name=project_data.name,
-            description=project_data.description,
-            owner_id="user_mock",
-            created_at="2026-02-03T17:30:00"
-        )
-    except Exception as e:
-        logger.error(f"❌ Error creating project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    new_project = Project(
+        id=str(uuid4()),
+        name=project.name,
+        description=project.description,
+        owner_id="user-001",
+        created_at=datetime.now()
+    )
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+
+    return {
+        "id": new_project.id,
+        "name": new_project.name,
+        "description": new_project.description,
+        "owner_id": new_project.owner_id,
+        "created_at": new_project.created_at.isoformat()
+    }
