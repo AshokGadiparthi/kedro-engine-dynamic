@@ -1,5 +1,5 @@
 """Database Models"""
-from sqlalchemy import Column, String, DateTime, Text, Integer
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean
 from sqlalchemy.sql import func
 from uuid import uuid4
 from app.core.database import Base
