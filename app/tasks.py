@@ -1,230 +1,195 @@
 """
-Celery tasks for ML Pipeline execution with Kedro integration
+Fixed Celery task for executing Kedro pipelines
+This version properly handles Kedro execution without blocking
 """
 
 import os
+import sys
 import logging
 from pathlib import Path
 from datetime import datetime
-from celery_app import app
-from kedro.framework.session import KedroSession
-from kedro.framework.project import configure_project  # FIXED: Add this import
-from kedro.runner import SequentialRunner
+from celery import shared_task
 from app.core.job_manager import JobManager
 
-# Configure logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
-# Initialize DB manager
-db_manager = JobManager()
-
-# Get Kedro project path from environment
+# Get Kedro project path from environment or default
 KEDRO_PROJECT_PATH = Path(os.getenv(
     'KEDRO_PROJECT_PATH',
     '/home/ashok/work/latest/full/kedro_working_project'
 ))
 
-logger.info(f"✅ Kedro project path configured: {KEDRO_PROJECT_PATH}")
+# Initialize job manager
+db_manager = JobManager()
 
 
-@app.task(name='app.tasks.execute_pipeline', bind=True)
+@shared_task(bind=True, name='app.tasks.execute_pipeline', time_limit=600)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
     """
-    Execute a Kedro pipeline and store results in database
-
-    This task:
-    1. Updates job status to "running"
-    2. Creates a Kedro session
-    3. Executes the specified pipeline
-    4. Captures results
-    5. Stores results in database
-    6. Handles errors gracefully
+    Execute a Kedro pipeline
 
     Args:
-        job_id (str): Unique job identifier
-        pipeline_name (str): Name of Kedro pipeline to execute
-        parameters (dict): Pipeline parameters (optional)
+        job_id: Job ID
+        pipeline_name: Name of pipeline to execute
+        parameters: Pipeline parameters
 
     Returns:
-        dict: Execution result with status and metadata
-
-    Example:
-        >>> execute_pipeline.delay(
-        ...     job_id='3b9c5987-2de6-4f9f-9828-85b55d6ca060',
-        ...     pipeline_name='data_loading',
-        ...     parameters={}
-        ... )
+        Result dict
     """
-
-    job_start_time = datetime.utcnow()
-    logger.info(f"{'='*80}")
-    logger.info(f"🚀 STARTING PIPELINE EXECUTION")
-    logger.info(f"{'='*80}")
-    logger.info(f"Job ID: {job_id}")
-    logger.info(f"Pipeline: {pipeline_name}")
-    logger.info(f"Parameters: {parameters or {}}")
+    if parameters is None:
+        parameters = {}
 
     try:
-        # ====================================================================
-        # STEP 1: Update job status
-        # ====================================================================
-        logger.info(f"\n[STEP 1] Updating job status...")
-        db_manager.update_job_status(job_id, "running")
-        logger.info(f"✅ Job {job_id} marked as RUNNING")
+        logger.info("=" * 80)
+        logger.info("🚀 STARTING PIPELINE EXECUTION")
+        logger.info("=" * 80)
+        logger.info(f"Job ID: {job_id}")
+        logger.info(f"Pipeline: {pipeline_name}")
+        logger.info(f"Parameters: {parameters}")
+        logger.info("")
 
-        # ====================================================================
+        # =========================================================================
+        # STEP 1: Update job status
+        # =========================================================================
+        logger.info("[STEP 1] Updating job status...")
+        try:
+            db_manager.update_job_status(job_id, "running")
+            logger.info(f"✅ Job {job_id} marked as RUNNING")
+        except Exception as e:
+            logger.error(f"❌ Failed to update job status: {e}")
+            raise
+
+        logger.info("")
+
+        # =========================================================================
         # STEP 2: Verify Kedro project exists
-        # ====================================================================
-        logger.info(f"\n[STEP 2] Verifying Kedro project...")
+        # =========================================================================
+        logger.info("[STEP 2] Verifying Kedro project...")
         if not KEDRO_PROJECT_PATH.exists():
             raise FileNotFoundError(f"Kedro project not found at {KEDRO_PROJECT_PATH}")
         logger.info(f"✅ Kedro project verified: {KEDRO_PROJECT_PATH}")
 
-        # ====================================================================
-        # STEP 3: Configure and Create Kedro session (FIXED)
-        # ====================================================================
-        logger.info(f"\n[STEP 3] Configuring Kedro project...")
-        logger.info(f"Loading project from {KEDRO_PROJECT_PATH}")
+        logger.info("")
 
-        # FIXED: Configure project BEFORE creating session
-        configure_project(str(KEDRO_PROJECT_PATH))
-        logger.info(f"✅ Kedro project configured successfully")
+        # =========================================================================
+        # STEP 3: Add Kedro project to Python path
+        # =========================================================================
+        logger.info("[STEP 3] Adding Kedro project to Python path...")
+        project_src = str(KEDRO_PROJECT_PATH / "src")
+        if project_src not in sys.path:
+            sys.path.insert(0, project_src)
+        logger.info(f"✅ Added to path: {project_src}")
 
-        logger.info(f"\nCreating Kedro session...")
-        with KedroSession.create(project_path=KEDRO_PROJECT_PATH) as session:
-            logger.info(f"✅ Kedro session created successfully")
+        logger.info("")
 
-            # ================================================================
-            # STEP 4: Prepare parameters
-            # ================================================================
-            logger.info(f"\n[STEP 4] Preparing pipeline parameters...")
-            extra_params = parameters or {}
+        # =========================================================================
+        # STEP 4: Import Kedro and load project
+        # =========================================================================
+        logger.info("[STEP 4] Loading Kedro project...")
+        try:
+            # Import AFTER adding to path
+            from kedro.framework.project import configure_project, ProjectNotFound
+            from kedro.framework.session import KedroSession
 
-            if extra_params:
-                logger.info(f"📊 Using custom parameters:")
-                for key, value in extra_params.items():
-                    logger.info(f"   - {key}: {value}")
-            else:
-                logger.info(f"✅ Using default parameters")
+            # This is the key - configure project, don't load session yet
+            logger.info(f"Configuring project from: {KEDRO_PROJECT_PATH}")
+            configure_project(str(KEDRO_PROJECT_PATH))
+            logger.info("✅ Kedro project configured")
 
-            # ================================================================
-            # STEP 5: Execute pipeline
-            # ================================================================
-            logger.info(f"\n[STEP 5] Executing pipeline: {pipeline_name}")
-            logger.info(f"{'='*80}")
+        except ImportError as e:
+            logger.error(f"❌ Failed to import Kedro: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Failed to configure project: {e}")
+            raise
 
-            try:
-                session.run(
+        logger.info("")
+
+        # =========================================================================
+        # STEP 5: Execute pipeline
+        # =========================================================================
+        logger.info("[STEP 5] Executing pipeline...")
+        start_time = datetime.utcnow()
+
+        try:
+            # Create session and run pipeline
+            with KedroSession.create(str(KEDRO_PROJECT_PATH)) as session:
+                logger.info(f"Session created, running pipeline: {pipeline_name}")
+
+                runner = session.run(
                     pipeline_name=pipeline_name,
-                    runner_class=SequentialRunner,
-                    extra_params=extra_params
+                    tags=None,
+                    runner=None,
                 )
-                logger.info(f"{'='*80}")
-                logger.info(f"✅ Pipeline execution COMPLETED")
 
-            except Exception as pipeline_error:
-                logger.error(f"{'='*80}")
-                logger.error(f"❌ Pipeline execution FAILED: {str(pipeline_error)}")
-                raise
+                logger.info(f"✅ Pipeline execution completed")
 
-        # ====================================================================
+        except Exception as e:
+            logger.error(f"❌ Pipeline execution failed: {e}")
+            raise
+
+        execution_time = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(f"Execution time: {execution_time:.2f}s")
+
+        logger.info("")
+
+        # =========================================================================
         # STEP 6: Prepare result
-        # ====================================================================
-        logger.info(f"\n[STEP 6] Preparing execution result...")
-
-        execution_time = (datetime.utcnow() - job_start_time).total_seconds()
-
+        # =========================================================================
+        logger.info("[STEP 6] Preparing result...")
         result = {
             "status": "completed",
+            "job_id": job_id,
             "pipeline_name": pipeline_name,
-            "message": f"Pipeline '{pipeline_name}' executed successfully",
             "execution_time": execution_time,
-            "parameters_used": extra_params,
-            "timestamp": job_start_time.isoformat()
+            "message": f"Pipeline '{pipeline_name}' executed successfully",
+            "timestamp": datetime.utcnow().isoformat(),
+            "parameters_used": parameters,
         }
+        logger.info(f"✅ Result prepared: {result}")
 
-        logger.info(f"✅ Result prepared:")
-        logger.info(f"   - Status: {result['status']}")
-        logger.info(f"   - Execution Time: {execution_time:.2f}s")
+        logger.info("")
 
-        # ====================================================================
-        # STEP 7: Store results in database
-        # ====================================================================
-        logger.info(f"\n[STEP 7] Storing results in database...")
+        # =========================================================================
+        # STEP 7: Update job in database
+        # =========================================================================
+        logger.info("[STEP 7] Updating job in database...")
+        try:
+            db_manager.update_job_status(job_id, "completed")
+            db_manager.update_job_result(job_id, result)
+            logger.info("✅ Job updated in database")
+        except Exception as e:
+            logger.error(f"❌ Failed to update job: {e}")
+            # Don't raise - job already completed
 
-        db_manager.update_job_results(job_id, result)
-        logger.info(f"✅ Results stored for job {job_id}")
-
-        # ====================================================================
-        # SUCCESS
-        # ====================================================================
-        logger.info(f"\n{'='*80}")
-        logger.info(f"✅ PIPELINE EXECUTION SUCCESSFUL")
-        logger.info(f"{'='*80}")
-        logger.info(f"Job ID: {job_id}")
-        logger.info(f"Pipeline: {pipeline_name}")
-        logger.info(f"Status: {result['status']}")
-        logger.info(f"Time: {execution_time:.2f}s")
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("✅ PIPELINE EXECUTION SUCCESSFUL")
+        logger.info("=" * 80)
+        logger.info("")
 
         return result
 
     except Exception as e:
-        # ====================================================================
-        # ERROR HANDLING
-        # ====================================================================
-        logger.error(f"\n{'='*80}")
-        logger.error(f"❌ PIPELINE EXECUTION FAILED")
-        logger.error(f"{'='*80}")
-        logger.error(f"Job ID: {job_id}")
-        logger.error(f"Pipeline: {pipeline_name}")
-        logger.error(f"Error Type: {type(e).__name__}")
-        logger.error(f"Error Message: {str(e)}", exc_info=True)
+        logger.error("=" * 80)
+        logger.error("❌ PIPELINE EXECUTION FAILED")
+        logger.error("=" * 80)
+        logger.error(f"Error: {str(e)}", exc_info=True)
+        logger.error("")
 
-        # Prepare error result
-        execution_time = (datetime.utcnow() - job_start_time).total_seconds()
-
-        error_result = {
-            "status": "failed",
-            "pipeline_name": pipeline_name,
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "execution_time": execution_time,
-            "timestamp": job_start_time.isoformat()
-        }
-
-        # Store error in database
+        # Update job status to failed
         try:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            db_manager.update_job_error(job_id, error_msg)
-            logger.info(f"✅ Error logged to database")
-        except Exception as log_error:
-            logger.error(f"❌ Failed to log error: {log_error}")
+            error_result = {
+                "status": "failed",
+                "job_id": job_id,
+                "pipeline_name": pipeline_name,
+                "message": f"Pipeline execution failed: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
+                "error": str(e),
+            }
+            db_manager.update_job_status(job_id, "failed")
+            db_manager.update_job_result(job_id, error_result)
+        except:
+            pass
 
-        return error_result
-
-
-@app.task(name='app.tasks.process_data')
-def process_data(dataset_id: str, processing_type: str):
-    """
-    Process dataset (placeholder for additional tasks)
-    """
-    logger.info(f"Processing dataset {dataset_id} with type {processing_type}")
-    return {
-        "status": "completed",
-        "dataset_id": dataset_id,
-        "processing_type": processing_type
-    }
-
-
-@app.task(name='app.tasks.analyze_data')
-def analyze_data(dataset_id: str, analysis_type: str):
-    """
-    Analyze dataset (placeholder for additional tasks)
-    """
-    logger.info(f"Analyzing dataset {dataset_id} with analysis {analysis_type}")
-    return {
-        "status": "completed",
-        "dataset_id": dataset_id,
-        "analysis_type": analysis_type
-    }
+        raise
