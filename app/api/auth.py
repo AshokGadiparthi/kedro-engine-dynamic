@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.models.models import User
 from app.schemas import UserRegister, UserLogin, TokenResponse, UserResponse
 
-#router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # JWT config
 SECRET_KEY = "your-secret-key-change-in-production"
