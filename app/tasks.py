@@ -1,5 +1,6 @@
 """
 Celery tasks for ML Pipeline execution with Kedro integration
+FIXED: Validates pipeline names and adds timeout protection
 """
 
 import os
@@ -8,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from celery_app import app
 from kedro.framework.session import KedroSession
-from kedro.framework.project import configure_project  # FIXED: Add this import
+from kedro.framework.project import configure_project
 from kedro.runner import SequentialRunner
 from app.core.job_manager import JobManager
 
@@ -27,34 +28,26 @@ KEDRO_PROJECT_PATH = Path(os.getenv(
 
 logger.info(f"✅ Kedro project path configured: {KEDRO_PROJECT_PATH}")
 
+# Valid pipeline names - MUST match your Kedro pipelines!
+VALID_PIPELINES = ['hello_world', 'data_pipeline', '__default__']
 
-@app.task(name='app.tasks.execute_pipeline', bind=True)
+
+def get_available_pipelines():
+    """Get list of available pipelines from Kedro project"""
+    try:
+        with KedroSession.create(project_path=KEDRO_PROJECT_PATH) as session:
+            return list(session.list_pipelines())
+    except Exception as e:
+        logger.warning(f"Could not fetch pipelines: {e}")
+        return VALID_PIPELINES
+
+
+@app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=600)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
     """
     Execute a Kedro pipeline and store results in database
 
-    This task:
-    1. Updates job status to "running"
-    2. Creates a Kedro session
-    3. Executes the specified pipeline
-    4. Captures results
-    5. Stores results in database
-    6. Handles errors gracefully
-
-    Args:
-        job_id (str): Unique job identifier
-        pipeline_name (str): Name of Kedro pipeline to execute
-        parameters (dict): Pipeline parameters (optional)
-
-    Returns:
-        dict: Execution result with status and metadata
-
-    Example:
-        >>> execute_pipeline.delay(
-        ...     job_id='3b9c5987-2de6-4f9f-9828-85b55d6ca060',
-        ...     pipeline_name='data_loading',
-        ...     parameters={}
-        ... )
+    FIXED: Now validates pipeline name before execution
     """
 
     job_start_time = datetime.utcnow()
@@ -82,12 +75,37 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         logger.info(f"✅ Kedro project verified: {KEDRO_PROJECT_PATH}")
 
         # ====================================================================
-        # STEP 3: Configure and Create Kedro session (FIXED)
+        # STEP 2.5: VALIDATE PIPELINE NAME (NEW!)
+        # ====================================================================
+        logger.info(f"\n[STEP 2.5] Validating pipeline name...")
+
+        # Check if pipeline name is a UUID (wrong!)
+        if '-' in pipeline_name and len(pipeline_name) == 36:
+            logger.error(f"❌ Invalid pipeline name: '{pipeline_name}'")
+            logger.error(f"   Pipeline name appears to be a UUID, not a valid pipeline name!")
+            logger.error(f"   Valid pipelines: {VALID_PIPELINES}")
+            raise ValueError(
+                f"Invalid pipeline name '{pipeline_name}'. "
+                f"Valid pipelines are: {', '.join(VALID_PIPELINES)}"
+            )
+
+        # Check if pipeline name is valid
+        if pipeline_name not in VALID_PIPELINES:
+            logger.error(f"❌ Pipeline '{pipeline_name}' not found!")
+            logger.error(f"   Valid pipelines: {VALID_PIPELINES}")
+            raise ValueError(
+                f"Pipeline '{pipeline_name}' not found. "
+                f"Valid pipelines are: {', '.join(VALID_PIPELINES)}"
+            )
+
+        logger.info(f"✅ Pipeline name is valid: {pipeline_name}")
+
+        # ====================================================================
+        # STEP 3: Configure and Create Kedro session
         # ====================================================================
         logger.info(f"\n[STEP 3] Configuring Kedro project...")
         logger.info(f"Loading project from {KEDRO_PROJECT_PATH}")
 
-        # FIXED: Configure project BEFORE creating session
         configure_project(str(KEDRO_PROJECT_PATH))
         logger.info(f"✅ Kedro project configured successfully")
 
