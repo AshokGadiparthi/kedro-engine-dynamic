@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 KEDRO_PROJECT_PATH = Path(os.getenv(
     'KEDRO_PROJECT_PATH',
-    '/home/ashok/work/latest/full/kedro_working_project'
+    '/home/ashok/work/latest/full/kedro-ml-engine-integrated'
 ))
 
 logger.info(f"Kedro project path: {KEDRO_PROJECT_PATH}")

@@ -32,13 +32,13 @@ db_manager = JobManager()
 # Get Kedro project path from environment
 KEDRO_PROJECT_PATH = Path(os.getenv(
     'KEDRO_PROJECT_PATH',
-    '/home/ashok/work/latest/full/kedro_working_project'
+    '/home/ashok/work/latest/full/kedro-ml-engine-integrated'
 ))
 
 logger.info(f"✅ Kedro project path configured: {KEDRO_PROJECT_PATH}")
 
 # Valid pipeline names - MUST match your Kedro pipelines!
-VALID_PIPELINES = ['__default__', 'data_processing']
+VALID_PIPELINES = ['__default__', 'data_processing', 'data_loading']
 
 
 @app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=600)
