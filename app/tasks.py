@@ -38,8 +38,15 @@ KEDRO_PROJECT_PATH = Path(os.getenv(
 logger.info(f"✅ Kedro project path configured: {KEDRO_PROJECT_PATH}")
 
 # Valid pipeline names - MUST match your Kedro pipelines!
-VALID_PIPELINES = ['__default__', 'data_processing', 'data_loading']
-
+#VALID_PIPELINES = ['__default__', 'data_processing', 'data_loading']
+VALID_PIPELINES = [
+    '__default__', 'complete', 'all', 'end_to_end', 'a_b_c',
+    'phase1', 'phase2', 'phase3', 'phase4', 'phase1_2', 'phase6',
+    'data_loading', 'data_validation', 'data_cleaning', 'data_processing',
+    'feature_engineering', 'model_training', 'algorithms',
+    'ensemble', 'ensemble_methods', 'complete_1_6',
+    'all_with_ensemble', 'end_to_end_full'
+]
 
 @app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=600)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
