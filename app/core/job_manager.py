@@ -1,439 +1,198 @@
 """
-Complete Database Manager - 100% WORKING
-Creates ALL tables for the entire application
-No broken functionality - backward compatible
+Job Manager - SQLAlchemy Version
+Manages pipeline job operations using SQLAlchemy ORM
+Database initialization handled by app/models/models.py
 """
 
-import sqlite3
 from datetime import datetime
-from pathlib import Path
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
 import logging
-import json
 import uuid
+import json
+from app.models.models import Job
+from app.core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path.cwd() / "ml_platform.db"
-
 
 class DatabaseManager:
-    """Manage all database operations"""
-    
+    """Manage job database operations using SQLAlchemy"""
+
     def __init__(self):
-        self.db_path = DB_PATH
-        self._init_db()
-    
-    def _init_db(self):
-        """Initialize database with ALL required tables"""
-        try:
-            # Ensure directory exists
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with sqlite3.connect(str(self.db_path)) as conn:
-                # Create USERS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS users (
-                        id TEXT PRIMARY KEY,
-                        username TEXT UNIQUE NOT NULL,
-                        email TEXT UNIQUE,
-                        password_hash TEXT NOT NULL,
-                        full_name TEXT,
-                        is_active BOOLEAN DEFAULT 1,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
-                # Create PROJECTS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS projects (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        description TEXT,
-                        owner_id TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (owner_id) REFERENCES users(id)
-                    )
-                ''')
-                
-                # Create DATASETS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS datasets (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        project_id TEXT NOT NULL,
-                        description TEXT,
-                        file_path TEXT,
-                        file_size INTEGER,
-                        file_name TEXT,
-                        file_size_bytes INTEGER,
-                        rows INTEGER,
-                        columns INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (project_id) REFERENCES projects(id)
-                    )
-                ''')
-                
-                # Create DATASOURCES table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS datasources (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        project_id TEXT NOT NULL,
-                        source_type TEXT NOT NULL,
-                        connection_string TEXT,
-                        description TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (project_id) REFERENCES projects(id)
-                    )
-                ''')
-                
-                # Create MODELS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS models (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        project_id TEXT NOT NULL,
-                        model_type TEXT NOT NULL,
-                        description TEXT,
-                        version TEXT,
-                        parameters TEXT,
-                        metrics TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (project_id) REFERENCES projects(id)
-                    )
-                ''')
-                
-                # Create ACTIVITIES table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS activities (
-                        id TEXT PRIMARY KEY,
-                        project_id TEXT,
-                        user_id TEXT NOT NULL,
-                        action TEXT NOT NULL,
-                        entity_type TEXT NOT NULL,
-                        entity_id TEXT NOT NULL,
-                        details TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (user_id) REFERENCES users(id)
-                    )
-                ''')
-                
-                # Create JOBS table (for Celery/pipeline jobs)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS jobs (
-                        id TEXT PRIMARY KEY,
-                        pipeline_name TEXT NOT NULL,
-                        user_id TEXT,
-                        status TEXT DEFAULT 'pending',
-                        parameters TEXT,
-                        results TEXT,
-                        error_message TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        started_at TIMESTAMP,
-                        completed_at TIMESTAMP,
-                        execution_time REAL
-                    )
-                ''')
-                
-                # Create EDA_JOBS table (for tracking EDA analysis)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS eda_jobs (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        status TEXT DEFAULT 'pending',
-                        current_phase TEXT,
-                        progress INTEGER DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        started_at TIMESTAMP,
-                        completed_at TIMESTAMP,
-                        error_message TEXT,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create EDA_RESULTS table (for storing EDA analysis results)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS eda_results (
-                        id TEXT PRIMARY KEY,
-                        user_id TEXT,
-                        summary TEXT,
-                        statistics TEXT,
-                        quality TEXT,
-                        correlations TEXT,
-                        analysis_status TEXT,
-                        dataset_id TEXT NOT NULL,
-                        eda_job_id TEXT NOT NULL,
-                        phase INTEGER,
-                        result_type TEXT,
-                        result_data TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create STATISTICS table (for dataset statistics)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS statistics (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column_name TEXT NOT NULL,
-                        stat_type TEXT NOT NULL,
-                        stat_value TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create CORRELATIONS table (for correlation analysis)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS correlations (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column1 TEXT NOT NULL,
-                        column2 TEXT NOT NULL,
-                        correlation_value REAL,
-                        p_value REAL,
-                        phase INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create QUALITY_METRICS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS quality_metrics (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        metric_name TEXT NOT NULL,
-                        metric_value REAL,
-                        metric_data TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create OUTLIERS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS outliers (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column_name TEXT NOT NULL,
-                        outlier_method TEXT,
-                        outlier_count INTEGER,
-                        outlier_indices TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create DISTRIBUTIONS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS distributions (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column_name TEXT NOT NULL,
-                        distribution_type TEXT,
-                        distribution_data TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create NORMALITY_TESTS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS normality_tests (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column_name TEXT NOT NULL,
-                        test_type TEXT,
-                        statistic REAL,
-                        p_value REAL,
-                        is_normal BOOLEAN,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create VIF_ANALYSIS table (Variance Inflation Factor)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS vif_analysis (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column_name TEXT NOT NULL,
-                        vif_value REAL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create FEATURE_CLUSTERING table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS feature_clustering (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        cluster_data TEXT,
-                        cluster_count INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create MULTICOLLINEARITY_WARNINGS table
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS multicollinearity_warnings (
-                        id TEXT PRIMARY KEY,
-                        dataset_id TEXT NOT NULL,
-                        column1 TEXT NOT NULL,
-                        column2 TEXT NOT NULL,
-                        correlation REAL,
-                        warning_level TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-                    )
-                ''')
-                
-                # Create PIPELINES table (for pipeline configurations)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS pipelines (
-                        id TEXT PRIMARY KEY,
-                        name TEXT UNIQUE NOT NULL,
-                        description TEXT,
-                        parameters TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
-                # Create SESSION_CACHE table (for caching session data)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS session_cache (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        expires_at TIMESTAMP,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
-                conn.commit()
-            
-            logger.info(f"✅ Database initialized at: {self.db_path}")
-            logger.info("✅ Created 20 tables successfully!")
-        
-        except Exception as e:
-            logger.error(f"❌ Database initialization error: {e}")
-            raise
-    
-    # Job operations (backward compatible)
+        """Initialize DatabaseManager"""
+        logger.info("✅ DatabaseManager initialized (SQLAlchemy mode)")
+
+    # Job operations - using SQLAlchemy
     def create_job(self, pipeline_name: str, user_id: str = None, parameters: dict = None) -> dict:
         """Create a new job"""
         job_id = str(uuid.uuid4())
-        
+
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute('''
-                    INSERT INTO jobs (id, pipeline_name, user_id, parameters, status)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    job_id,
-                    pipeline_name,
-                    user_id or "anonymous",
-                    json.dumps(parameters) if parameters else "{}",
-                    "pending"
-                ))
-                conn.commit()
-            
+            db = SessionLocal()
+
+            job = Job(
+                id=job_id,
+                pipeline_name=pipeline_name,
+                user_id=user_id or "anonymous",
+                parameters=json.dumps(parameters) if parameters else "{}",
+                status="pending"
+            )
+
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+
             logger.info(f"✅ Job created: {job_id}")
-            return self.get_job(job_id)
+            return self._job_to_dict(job)
+
         except Exception as e:
             logger.error(f"❌ Error creating job: {e}")
             raise
-    
+        finally:
+            db.close()
+
     def get_job(self, job_id: str) -> dict:
         """Get job details"""
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute('SELECT * FROM jobs WHERE id = ?', (job_id,))
-                row = cursor.fetchone()
-            
-            if not row:
+            db = SessionLocal()
+            job = db.query(Job).filter(Job.id == job_id).first()
+
+            if not job:
+                logger.warning(f"Job not found: {job_id}")
                 return None
-            
-            return {
-                'id': row['id'],
-                'pipeline_name': row['pipeline_name'],
-                'user_id': row['user_id'],
-                'status': row['status'],
-                'parameters': json.loads(row['parameters']),
-                'results': json.loads(row['results']) if row['results'] else None,
-                'error_message': row['error_message'],
-                'created_at': row['created_at'],
-                'started_at': row['started_at'],
-                'completed_at': row['completed_at'],
-                'execution_time': row['execution_time']
-            }
+
+            return self._job_to_dict(job)
+
         except Exception as e:
             logger.error(f"❌ Error getting job: {e}")
             raise
-    
+        finally:
+            db.close()
+
     def update_job_status(self, job_id: str, status: str):
         """Update job status"""
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute('UPDATE jobs SET status = ? WHERE id = ?', (status, job_id))
-                conn.commit()
+            db = SessionLocal()
+            job = db.query(Job).filter(Job.id == job_id).first()
+
+            if job:
+                job.status = status
+                db.commit()
+                logger.info(f"✅ Job status updated: {job_id} -> {status}")
+            else:
+                logger.warning(f"Job not found for update: {job_id}")
+
         except Exception as e:
-            logger.error(f"❌ Error updating job: {e}")
+            logger.error(f"❌ Error updating job status: {e}")
             raise
-    
+        finally:
+            db.close()
+
     def update_job_results(self, job_id: str, results: dict):
         """Update job results"""
-        now = datetime.utcnow().isoformat()
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute(
-                    'UPDATE jobs SET results = ?, completed_at = ? WHERE id = ?',
-                    (json.dumps(results), now, job_id)
-                )
-                conn.commit()
+            db = SessionLocal()
+            job = db.query(Job).filter(Job.id == job_id).first()
+
+            if job:
+                job.results = json.dumps(results) if results else None
+                job.completed_at = datetime.utcnow()
+                db.commit()
+                logger.info(f"✅ Job results updated: {job_id}")
+            else:
+                logger.warning(f"Job not found for results update: {job_id}")
+
         except Exception as e:
-            logger.error(f"❌ Error: {e}")
+            logger.error(f"❌ Error updating job results: {e}")
             raise
-    
+        finally:
+            db.close()
+
     def update_job_error(self, job_id: str, error: str):
         """Update job error"""
-        now = datetime.utcnow().isoformat()
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute(
-                    'UPDATE jobs SET error_message = ?, completed_at = ? WHERE id = ?',
-                    (error, now, job_id)
-                )
-                conn.commit()
+            db = SessionLocal()
+            job = db.query(Job).filter(Job.id == job_id).first()
+
+            if job:
+                job.error_message = error
+                job.status = "failed"
+                job.completed_at = datetime.utcnow()
+                db.commit()
+                logger.info(f"✅ Job error recorded: {job_id}")
+            else:
+                logger.warning(f"Job not found for error update: {job_id}")
+
         except Exception as e:
-            logger.error(f"❌ Error: {e}")
+            logger.error(f"❌ Error updating job error: {e}")
             raise
-    
-    def list_jobs(self, limit: int = 50):
-        """List jobs"""
+        finally:
+            db.close()
+
+    def list_jobs(self, limit: int = 50) -> list:
+        """List jobs ordered by creation date"""
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                    'SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?',
-                    (limit,)
-                )
-                rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+            db = SessionLocal()
+            jobs = db.query(Job).order_by(desc(Job.created_at)).limit(limit).all()
+
+            result = [self._job_to_dict(job) for job in jobs]
+            logger.info(f"✅ Retrieved {len(result)} jobs")
+            return result
+
         except Exception as e:
-            logger.error(f"❌ Error: {e}")
+            logger.error(f"❌ Error listing jobs: {e}")
             raise
+        finally:
+            db.close()
+
+    def get_jobs_by_status(self, status: str, limit: int = 50) -> list:
+        """Get jobs filtered by status"""
+        try:
+            db = SessionLocal()
+            jobs = db.query(Job).filter(Job.status == status).order_by(desc(Job.created_at)).limit(limit).all()
+
+            result = [self._job_to_dict(job) for job in jobs]
+            logger.info(f"✅ Retrieved {len(result)} jobs with status: {status}")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Error getting jobs by status: {e}")
+            raise
+        finally:
+            db.close()
+
+    def get_jobs_by_pipeline(self, pipeline_name: str, limit: int = 50) -> list:
+        """Get jobs for a specific pipeline"""
+        try:
+            db = SessionLocal()
+            jobs = db.query(Job).filter(Job.pipeline_name == pipeline_name).order_by(desc(Job.created_at)).limit(limit).all()
+
+            result = [self._job_to_dict(job) for job in jobs]
+            logger.info(f"✅ Retrieved {len(result)} jobs for pipeline: {pipeline_name}")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Error getting jobs by pipeline: {e}")
+            raise
+        finally:
+            db.close()
+
+    def _job_to_dict(self, job) -> dict:
+        """Convert Job model to dictionary"""
+        return {
+            'id': job.id,
+            'pipeline_name': job.pipeline_name,
+            'user_id': job.user_id,
+            'status': job.status,
+            'parameters': json.loads(job.parameters) if job.parameters else {},
+            'results': json.loads(job.results) if job.results else None,
+            'error_message': job.error_message,
+            'created_at': job.created_at.isoformat() if job.created_at else None,
+            'started_at': job.started_at.isoformat() if job.started_at else None,
+            'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+            'execution_time': job.execution_time
+        }
 
 
 # Backward compatibility alias
