@@ -28,22 +28,46 @@ from typing import Any
 import pandas as pd
 
 def convert_numpy_types(obj: Any) -> Any:
-    if isinstance(obj, pd.DataFrame):
-        return obj.to_dict('records')
+    """
+    Convert ALL numpy types to Python native types for JSON serialization
+    ✅ More comprehensive - catches more numpy types
+    """
+    # Handle numpy generic types
+    if isinstance(obj, np.generic):
+        # This catches ALL numpy scalar types
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, (np.integer, np.int8, np.int16, np.int32, np.int64,
+                              np.uint8, np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float16, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, np.complexfloating):
+            return complex(obj)
+        else:
+            return obj
+
+    # Handle pandas DataFrames
+    elif isinstance(obj, pd.DataFrame):
+        return obj.applymap(convert_numpy_types).to_dict('records')
+
+    # Handle pandas Series
     elif isinstance(obj, pd.Series):
-        return obj.to_dict()
+        return obj.apply(convert_numpy_types).to_dict()
+
+    # Handle numpy arrays
     elif isinstance(obj, np.ndarray):
-        return obj.tolist()
+        return convert_numpy_types(obj.tolist())
+
+    # Handle dictionaries (recursive)
     elif isinstance(obj, dict):
         return {key: convert_numpy_types(value) for key, value in obj.items()}
+
+    # Handle lists and tuples (recursive)
     elif isinstance(obj, (list, tuple)):
         return [convert_numpy_types(item) for item in obj]
-    elif isinstance(obj, (np.integer, np.int32, np.int64)):
-        return int(obj)
-    elif isinstance(obj, (np.floating, np.float32, np.float64)):
-        return float(obj)
-    elif isinstance(obj, np.bool_):
-        return bool(obj)
+
+    # Return as-is for other types
     else:
         return obj
 
