@@ -356,6 +356,7 @@ class DatasourceResponse(BaseModel):
                 "type": "csv",
                 "description": "Customer information",
                 "file_path": "/uploads/customer_data.csv",
+                "file_name": "File Name",
                 "file_size": 1024000,
                 "is_active": True,
                 "is_connected": True,
