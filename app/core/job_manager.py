@@ -112,6 +112,7 @@ class DatabaseManager:
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS activities (
                         id TEXT PRIMARY KEY,
+                        project_id TEXT,
                         user_id TEXT NOT NULL,
                         action TEXT NOT NULL,
                         entity_type TEXT NOT NULL,
