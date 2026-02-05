@@ -1,11 +1,11 @@
 """
 Celery tasks for ML Pipeline execution with Kedro integration
-COMPLETE VERSION: Subprocess + All Existing Functionality
+COMPLETE VERSION: Subprocess + All Existing Functionality + PARAMETER FIX
 
 Features:
 - Non-blocking Kedro execution using subprocess
 - Pipeline name validation
-- Parameter support
+- Parameter support with proper CLI formatting ✅ FIXED
 - Comprehensive logging
 - Database integration
 - Error handling
@@ -38,7 +38,6 @@ KEDRO_PROJECT_PATH = Path(os.getenv(
 logger.info(f"✅ Kedro project path configured: {KEDRO_PROJECT_PATH}")
 
 # Valid pipeline names - MUST match your Kedro pipelines!
-#VALID_PIPELINES = ['__default__', 'data_processing', 'data_loading']
 VALID_PIPELINES = [
     '__default__', 'complete', 'all', 'end_to_end', 'a_b_c',
     'phase1', 'phase2', 'phase3', 'phase4', 'phase1_2', 'phase6',
@@ -47,6 +46,51 @@ VALID_PIPELINES = [
     'ensemble', 'ensemble_methods', 'complete_1_6',
     'all_with_ensemble', 'end_to_end_full','complete_1_6','complete_1_5_6','phase5'
 ]
+
+
+# ============================================================================
+# ✅ HELPER FUNCTION - Parameter Flattening (NEW)
+# ============================================================================
+
+def flatten_parameters(params, parent_key=""):
+    """
+    Flatten nested parameters to dot notation for Kedro CLI
+
+    ✅ FIXES THE PARAMETER FORMATTING ISSUE!
+
+    Example:
+        Input:  {'data_loading': {'filepath': 'data/01_raw/file.csv'}}
+        Output: {'data_loading.filepath': 'data/01_raw/file.csv'}
+
+    This allows Kedro CLI to properly parse parameters:
+        Before: --params data_loading:{'filepath': '...'}  ❌ WRONG
+        After:  --params data_loading.filepath=...         ✅ CORRECT
+
+    Args:
+        params (dict): Nested parameters dictionary
+        parent_key (str): Parent key for recursion (internal use)
+
+    Returns:
+        dict: Flattened dictionary with dot-notation keys
+    """
+    items = []
+
+    for k, v in params.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+
+        if isinstance(v, dict):
+            # Recursively flatten nested dicts
+            items.extend(flatten_parameters(v, new_key).items())
+        else:
+            # Convert value to string for CLI
+            items.append((new_key, str(v)))
+
+    return dict(items)
+
+
+# ============================================================================
+# MAIN PIPELINE EXECUTION TASK
+# ============================================================================
 
 @app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=600)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
@@ -141,10 +185,13 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         python_exe = sys.executable
         cmd = [python_exe, '-m', 'kedro', 'run', '--pipeline', pipeline_name]
 
-        # Add parameters if provided
+        # ✅ FIX: Add parameters with proper formatting
         if extra_params:
-            for key, value in extra_params.items():
-                cmd.extend(['--params', f'{key}:{value}'])
+            flat_params = flatten_parameters(extra_params)  # ✅ FLATTEN NESTED PARAMS
+            logger.info(f"📊 Flattened parameters:")
+            for key, value in flat_params.items():
+                logger.info(f"   - {key}={value}")  # Show what's being passed
+                cmd.extend(['--params', f'{key}={value}'])  # ✅ Use = not :
 
         logger.info(f"Command: {' '.join(cmd)}")
         logger.info(f"Working directory: {KEDRO_PROJECT_PATH}")
@@ -262,6 +309,10 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
 
         return error_result
 
+
+# ============================================================================
+# ADDITIONAL TASKS (process_data, analyze_data)
+# ============================================================================
 
 @app.task(name='app.tasks.process_data', bind=True)
 def process_data(self, dataset_id: str, processing_type: str, parameters: dict = None):
@@ -411,3 +462,6 @@ def analyze_data(self, dataset_id: str, analysis_type: str, parameters: dict = N
         }
 
         return error_result
+
+
+logger.info("✅ Celery tasks initialized successfully")
