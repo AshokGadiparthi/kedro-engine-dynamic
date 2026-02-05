@@ -118,6 +118,7 @@ async def create_dataset(
             description=description or "",
             file_name=original_filename,
             file_size_bytes=len(contents),
+            file_path = kedro_relative_path,
             created_at=datetime.now()
         )
         db.add(new_dataset)
