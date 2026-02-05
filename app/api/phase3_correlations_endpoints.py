@@ -25,10 +25,14 @@ import os
 
 import numpy as np
 from typing import Any
+import pandas as pd
 
 def convert_numpy_types(obj: Any) -> Any:
-    """Convert numpy types to Python native types"""
-    if isinstance(obj, np.ndarray):
+    if isinstance(obj, pd.DataFrame):
+        return obj.to_dict('records')
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
+    elif isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, dict):
         return {key: convert_numpy_types(value) for key, value in obj.items()}
@@ -38,6 +42,8 @@ def convert_numpy_types(obj: Any) -> Any:
         return int(obj)
     elif isinstance(obj, (np.floating, np.float32, np.float64)):
         return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
     else:
         return obj
 
@@ -178,14 +184,14 @@ async def get_enhanced_correlations(
 
         logger.info(f"✅ Enhanced correlations analysis completed")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": results,
             "threshold": threshold,
             "analysis_type": "Enhanced Correlations",
             "total_features": len(df.select_dtypes(include=['number']).columns)
-        }
+        })
 
     except HTTPException:
         raise
@@ -229,7 +235,7 @@ async def get_vif_analysis(
 
         logger.info(f"✅ VIF analysis completed")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": vif_results,
@@ -239,7 +245,7 @@ async def get_vif_analysis(
                 "moderate": "VIF 5-10: Moderate multicollinearity - caution recommended",
                 "high": "VIF > 10: High multicollinearity - action needed"
             }
-        }
+        })
 
     except HTTPException:
         raise
@@ -276,12 +282,12 @@ async def get_heatmap_data(
 
         logger.info(f"✅ Heatmap data generated")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "heatmap": heatmap_data,
             "analysis_type": "Correlation Heatmap Data"
-        }
+        })
 
     except HTTPException:
         raise
@@ -318,12 +324,12 @@ async def get_correlation_clustering(
 
         logger.info(f"✅ Correlation clustering completed")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "clustering": clustering,
             "analysis_type": "Correlation-Based Feature Clustering"
-        }
+        })
 
     except HTTPException:
         raise
@@ -362,12 +368,12 @@ async def get_relationship_insights(
 
         logger.info(f"✅ Relationship insights generated")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "insights": insights,
             "analysis_type": "Relationship Insights"
-        }
+        })
 
     except HTTPException:
         raise
@@ -405,12 +411,12 @@ async def get_multicollinearity_warnings(
 
         logger.info(f"✅ Multicollinearity warnings generated")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "warnings": warnings,
             "analysis_type": "Multicollinearity Warnings"
-        }
+        })
 
     except HTTPException:
         raise
