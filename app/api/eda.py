@@ -251,6 +251,7 @@ async def start_eda_analysis(
         from app.models.models import Activity
         activity = Activity(
             user_id=user_id,
+            project_id=dataset.project_id,  # ← ADD THIS LINE
             action="analysis_started",
             entity_type="dataset",
             entity_id=dataset_id,
