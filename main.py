@@ -12,6 +12,14 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+from app.core.database import engine, Base, init_db
+from app.models.models import (
+    User, Workspace, Project, Dataset, Activity,
+    Datasource, Model, Job,  # ← Must include Job!
+    EdaResult, EDASummary, EDAStatistics, EDAQuality, EDACorrelations
+)
+
+Base.metadata.create_all(bind=engine)  # Creates all registered models
 
 # Load environment variables
 load_dotenv()

@@ -1,5 +1,5 @@
 """Database Models"""
-from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey,Float
 from sqlalchemy.sql import func
 from uuid import uuid4
 from app.core.database import Base
@@ -172,5 +172,24 @@ class Model(Base):
     description = Column(Text, nullable=True)
     model_type = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Job(Base):
+    """Pipeline job execution model"""
+    __tablename__ = "jobs"
+
+    id = Column(String(36), primary_key=True, index=True)
+    pipeline_name = Column(String(255), nullable=False)
+    user_id = Column(String(36), nullable=True)
+    status = Column(String(50), default="pending")  # pending, running, completed, failed
+    parameters = Column(Text, default="{}")  # JSON string
+    results = Column(Text, nullable=True)  # JSON string
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    execution_time = Column(Float, nullable=True)  # seconds
+
+    def __repr__(self):
+        return f"<Job {self.id}: {self.pipeline_name} - {self.status}>"
 
 
