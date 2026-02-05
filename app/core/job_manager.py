@@ -67,6 +67,7 @@ class DatabaseManager:
                         file_path TEXT,
                         file_size INTEGER,
                         file_name TEXT,
+                        file_size_bytes INTEGER,
                         rows INTEGER,
                         columns INTEGER,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
