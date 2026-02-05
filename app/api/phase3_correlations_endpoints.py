@@ -57,9 +57,9 @@ def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
         file_path = None
 
         # Try primary attribute first (YOUR schema)
-        if hasattr(dataset_record, 'file_name') and dataset_record.file_name:
-            file_path = dataset_record.file_name
-            logger.info(f"✅ Found file path in attribute: 'file_name'")
+        if hasattr(dataset_record, 'file_path') and dataset_record.file_path:
+            file_path = dataset_record.file_path
+            logger.info(f"✅ Found file path in attribute: 'file_path'")
 
         # Fallback to other common attributes if needed
         if not file_path:
