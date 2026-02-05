@@ -92,6 +92,9 @@ def flatten_parameters(params, parent_key=""):
 # MAIN PIPELINE EXECUTION TASK
 # ============================================================================
 
+# --- Add this before subprocess.run ---
+env = os.environ.copy()
+
 @app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=3600, soft_time_limit=3300)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
     """Execute a Kedro pipeline using subprocess"""
@@ -137,6 +140,11 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
             for key, value in extra_params.items():
                 logger.info(f"   - {key}: {value}")
 
+        # your API is sending: parameters={"data_loading": {"filepath": "..."}}
+        if extra_params and "data_loading" in extra_params and "filepath" in extra_params["data_loading"]:
+            env["RAW_DATA_FILEPATH"] = str(extra_params["data_loading"]["filepath"])
+            logger.info(f"✅ Set RAW_DATA_FILEPATH={env['RAW_DATA_FILEPATH']}")
+
         # STEP 4: Execute pipeline via subprocess
         logger.info(f"\n[STEP 4] Executing pipeline via subprocess...")
 
@@ -164,6 +172,7 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
             result = subprocess.run(
                 cmd,
                 cwd=str(KEDRO_PROJECT_PATH),
+                env=env,              # ✅ ADD THIS
                 capture_output=True,
                 text=True,
                 timeout=300,
