@@ -1,6 +1,5 @@
 """Database Models"""
-from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey
 from sqlalchemy.sql import func
 from uuid import uuid4
 from app.core.database import Base
@@ -56,33 +55,14 @@ class Activity(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
     user_id = Column(String, index=True)
-    project_id = Column(String, nullable=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)  # ✅ KEEP THIS
     action = Column(String)
     entity_type = Column(String)
     entity_id = Column(String)
     details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
-    #user = relationship("User", back_populates="activities")
-    project = relationship("Project", back_populates="activities")  # ✅ ADDED
 
-    def __repr__(self):
-        return f"<Activity {self.id}: {self.action} on {self.entity_type}>"
-
-    def to_dict(self):
-        """Convert to dictionary"""
-        return {
-            "id": self.id,
-            "user_id": self.user_id,
-            "project_id": self.project_id,
-            "action": self.action,
-            "entity_type": self.entity_type,
-            "entity_id": self.entity_id,
-            "entity_name": self.entity_name,
-            "details": self.details,
-            "created_at": self.created_at.isoformat() if self.created_at else None
-        }
 
 class EdaResult(Base):
     """EDA Analysis Results - stores all analysis data"""
