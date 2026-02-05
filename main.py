@@ -134,6 +134,13 @@ except ImportError as e:
     logger.warning(f"⚠️  Jobs router: {e}")
     jobs = None
 
+try:
+    from app.api import phase3_correlations_endpoints
+    logger.info("✅ phase3_correlations_endpoints router imported")
+except ImportError as e:
+    logger.warning(f"⚠️  phase3_correlations_endpoints router: {e}")
+    phase3_correlations_endpoints = None
+
 # ============================================================================
 # APPLICATION LIFECYCLE
 # ============================================================================
@@ -279,6 +286,10 @@ if pipelines:
 if jobs:
     app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
     logger.info("✅ Jobs router included")
+
+if phase3_correlations_endpoints:
+    app.include_router(phase3_correlations_endpoints.router, prefix="/api/eda", tags=["Phase3"])
+    logger.info("✅ Pipelines router included")
 
 # ============================================================================
 # ENTRY POINT
