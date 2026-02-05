@@ -20,6 +20,11 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="", tags=["Phase 3 - Correlations"])
 logger = logging.getLogger(__name__)
 
+from pathlib import Path
+import os
+
+KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
+
 
 def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
     """
@@ -60,6 +65,9 @@ def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
         if hasattr(dataset_record, 'file_path') and dataset_record.file_path:
             file_path = dataset_record.file_path
             logger.info(f"✅ Found file path in attribute: 'file_path'")
+
+        # 2. Build file path from database file_path
+        file_path = os.path.join(str(KEDRO_PROJECT_PATH), file_path)
 
         # Fallback to other common attributes if needed
         if not file_path:
