@@ -92,7 +92,7 @@ def flatten_parameters(params, parent_key=""):
 # MAIN PIPELINE EXECUTION TASK
 # ============================================================================
 
-@app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=600)
+@app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=3600, soft_time_limit=3300)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
     """Execute a Kedro pipeline using subprocess"""
 
@@ -124,7 +124,14 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
 
         # STEP 3: Prepare parameters
         logger.info(f"\n[STEP 3] Preparing pipeline parameters...")
+        # ✅ IMPORTANT:
+        # Sometimes FastAPI sends the full request body into Celery like:
+        # {"project_id": "p1", "parameters": {...}}
+        # Kedro expects keys like data_loading.filepath (NOT parameters.data_loading.filepath)
         extra_params = parameters or {}
+        if isinstance(extra_params, dict) and "parameters" in extra_params:
+            extra_params = extra_params["parameters"]  # ✅ unwrap
+
         if extra_params:
             logger.info(f"📊 Using custom parameters:")
             for key, value in extra_params.items():
@@ -139,22 +146,14 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
 
         # ✅ FIX: Add parameters with proper formatting
         if extra_params:
-            # Flatten nested parameters
-            def flatten_params(p, pk=""):
-                items = []
-                for k, v in p.items():
-                    nk = f"{pk}.{k}" if pk else k
-                    if isinstance(v, dict):
-                        items.extend(flatten_params(v, nk).items())
-                    else:
-                        items.append((nk, str(v)))
-                return dict(items)
+            flat_params = flatten_parameters(extra_params)  # ✅ use your helper
+            logger.info("📊 Flattened parameters:")
+            for k, v in flat_params.items():
+                logger.info(f"   - {k}={v}")
 
-            flat_params = flatten_params(extra_params)
-            logger.info(f"📊 Flattened parameters:")
-            for key, value in flat_params.items():
-                logger.info(f"   - {key}={value}")
-                cmd.extend(['--params', f'{key}={value}'])  # ✅ Use = not :
+            # ✅ Kedro expects ONE --params with comma-separated values
+            params_str = ",".join([f"{k}={v}" for k, v in flat_params.items()])
+            cmd.extend(["--params", params_str])
 
         logger.info(f"Command: {' '.join(cmd)}")
         logger.info(f"Working directory: {KEDRO_PROJECT_PATH}")
