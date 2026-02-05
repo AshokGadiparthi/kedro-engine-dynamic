@@ -27,49 +27,60 @@ import numpy as np
 from typing import Any
 import pandas as pd
 
+from typing import Any
+import numpy as np
+import pandas as pd
+import math
+from datetime import datetime, date
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+
 def convert_numpy_types(obj: Any) -> Any:
-    """
-    Convert ALL numpy types to Python native types for JSON serialization
-    ✅ More comprehensive - catches more numpy types
-    """
-    # Handle numpy generic types
+    # --- numpy scalars ---
     if isinstance(obj, np.generic):
-        # This catches ALL numpy scalar types
         if isinstance(obj, np.bool_):
             return bool(obj)
-        elif isinstance(obj, (np.integer, np.int8, np.int16, np.int32, np.int64,
-                              np.uint8, np.uint16, np.uint32, np.uint64)):
+        if isinstance(obj, np.integer):
             return int(obj)
-        elif isinstance(obj, (np.floating, np.float16, np.float32, np.float64)):
-            return float(obj)
-        elif isinstance(obj, np.complexfloating):
-            return complex(obj)
-        else:
-            return obj
+        if isinstance(obj, np.floating):
+            val = float(obj)
+            # JSON does not like NaN/Infinity
+            if math.isnan(val) or math.isinf(val):
+                return None
+            return val
+        return obj.item()  # fallback for other numpy scalars
 
-    # Handle pandas DataFrames
-    elif isinstance(obj, pd.DataFrame):
-        return obj.applymap(convert_numpy_types).to_dict('records')
+    # --- pandas missing values ---
+    if obj is pd.NA:
+        return None
 
-    # Handle pandas Series
-    elif isinstance(obj, pd.Series):
-        return obj.apply(convert_numpy_types).to_dict()
+    # --- pandas objects ---
+    if isinstance(obj, pd.DataFrame):
+        return convert_numpy_types(obj.to_dict(orient="records"))
 
-    # Handle numpy arrays
-    elif isinstance(obj, np.ndarray):
+    if isinstance(obj, pd.Series):
+        return convert_numpy_types(obj.to_list())
+
+    if isinstance(obj, (pd.Timestamp, datetime, date)):
+        return obj.isoformat()
+
+    # --- numpy arrays ---
+    if isinstance(obj, np.ndarray):
         return convert_numpy_types(obj.tolist())
 
-    # Handle dictionaries (recursive)
-    elif isinstance(obj, dict):
-        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    # --- dicts (IMPORTANT: convert KEYS too) ---
+    if isinstance(obj, dict):
+        return {
+            str(convert_numpy_types(k)): convert_numpy_types(v)
+            for k, v in obj.items()
+        }
 
-    # Handle lists and tuples (recursive)
-    elif isinstance(obj, (list, tuple)):
-        return [convert_numpy_types(item) for item in obj]
+    # --- iterables (IMPORTANT: handle sets) ---
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return [convert_numpy_types(x) for x in obj]
 
-    # Return as-is for other types
-    else:
-        return obj
+    return obj
+
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 
@@ -204,14 +215,17 @@ async def get_enhanced_correlations(
 
         logger.info(f"✅ Enhanced correlations analysis completed")
 
-        return convert_numpy_types({
+        payload = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": results,
             "threshold": threshold,
             "analysis_type": "Enhanced Correlations",
             "total_features": len(df.select_dtypes(include=['number']).columns)
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -255,7 +269,7 @@ async def get_vif_analysis(
 
         logger.info(f"✅ VIF analysis completed")
 
-        return convert_numpy_types({
+        payload = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": vif_results,
@@ -265,7 +279,10 @@ async def get_vif_analysis(
                 "moderate": "VIF 5-10: Moderate multicollinearity - caution recommended",
                 "high": "VIF > 10: High multicollinearity - action needed"
             }
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -302,12 +319,15 @@ async def get_heatmap_data(
 
         logger.info(f"✅ Heatmap data generated")
 
-        return convert_numpy_types({
+        payload = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "heatmap": heatmap_data,
             "analysis_type": "Correlation Heatmap Data"
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -344,12 +364,15 @@ async def get_correlation_clustering(
 
         logger.info(f"✅ Correlation clustering completed")
 
-        return convert_numpy_types({
+        payload  = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "clustering": clustering,
             "analysis_type": "Correlation-Based Feature Clustering"
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -388,12 +411,15 @@ async def get_relationship_insights(
 
         logger.info(f"✅ Relationship insights generated")
 
-        return convert_numpy_types({
+        payload  = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "insights": insights,
             "analysis_type": "Relationship Insights"
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -431,12 +457,15 @@ async def get_multicollinearity_warnings(
 
         logger.info(f"✅ Multicollinearity warnings generated")
 
-        return convert_numpy_types({
+        payload = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "warnings": warnings,
             "analysis_type": "Multicollinearity Warnings"
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
@@ -492,14 +521,17 @@ async def get_complete_correlation_analysis(
 
         logger.info(f"✅ Complete correlation analysis finished")
 
-        return convert_numpy_types({
+        payload  = {
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": complete_analysis,
             "analysis_type": "Complete Phase 3 Correlation Analysis",
             "components": 6,
             "total_features": len(df.select_dtypes(include=['number']).columns)
-        })
+        }
+
+        safe_payload = convert_numpy_types(payload)
+        return JSONResponse(content=jsonable_encoder(safe_payload))
 
     except HTTPException:
         raise
