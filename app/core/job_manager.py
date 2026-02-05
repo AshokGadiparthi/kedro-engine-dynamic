@@ -165,6 +165,7 @@ class DatabaseManager:
                         statistics TEXT,
                         quality TEXT,
                         correlations TEXT,
+                        analysis_status TEXT,
                         dataset_id TEXT NOT NULL,
                         eda_job_id TEXT NOT NULL,
                         phase INTEGER,
