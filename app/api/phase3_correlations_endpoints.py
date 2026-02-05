@@ -23,6 +23,24 @@ logger = logging.getLogger(__name__)
 from pathlib import Path
 import os
 
+import numpy as np
+from typing import Any
+
+def convert_numpy_types(obj: Any) -> Any:
+    """Convert numpy types to Python native types"""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    else:
+        return obj
+
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 
 
@@ -448,14 +466,14 @@ async def get_complete_correlation_analysis(
 
         logger.info(f"✅ Complete correlation analysis finished")
 
-        return {
+        return convert_numpy_types({
             "dataset_id": dataset_id,
             "timestamp": datetime.now().isoformat(),
             "analysis": complete_analysis,
             "analysis_type": "Complete Phase 3 Correlation Analysis",
             "components": 6,
             "total_features": len(df.select_dtypes(include=['number']).columns)
-        }
+        })
 
     except HTTPException:
         raise
