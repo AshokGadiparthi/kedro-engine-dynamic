@@ -45,8 +45,8 @@ class Dataset(Base):
     name = Column(String, index=True)
     project_id = Column(String, index=True)
     description = Column(Text, nullable=True)
-    file_name = Column(String)
-    file_size_bytes = Column(Integer)
+    file_name = Column(String(255), nullable=True)  # ✅ Changed from file_path
+    file_size_bytes = Column(Integer, nullable=True)  # ✅ Changed from file_size
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Activity(Base):
