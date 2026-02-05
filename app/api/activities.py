@@ -66,8 +66,8 @@ async def list_activities(
                 project_id=a.project_id,
                 action=a.action,
                 entity_type=a.entity_type,
-                #entity_id=a.entity_id,
-                entity_name=a.entity_name,
+                entity_id=a.entity_id,
+                #entity_name=a.entity_name,
                 details=a.details,
                 created_at=a.created_at.isoformat()
             )
@@ -103,7 +103,7 @@ async def create_activity(
             action=activity_data.action,
             entity_type=activity_data.entity_type,
             entity_id=activity_data.entity_id,
-            entity_name=getattr(activity_data, 'entity_name', None),
+            #entity_name=getattr(activity_data, 'entity_name', None),
             details=activity_data.details,
             created_at=datetime.utcnow()
         )
@@ -121,7 +121,7 @@ async def create_activity(
             action=activity.action,
             entity_type=activity.entity_type,
             entity_id=activity.entity_id,
-            entity_name=activity.entity_name,
+            #entity_name=activity.entity_name,
             details=activity.details,
             created_at=activity.created_at.isoformat()
         )
@@ -165,7 +165,7 @@ async def get_activity(
             action=activity.action,
             entity_type=activity.entity_type,
             entity_id=activity.entity_id,
-            entity_name=activity.entity_name,
+            #entity_name=activity.entity_name,
             details=activity.details,
             created_at=activity.created_at.isoformat()
         )
