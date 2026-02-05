@@ -340,6 +340,7 @@ class DatasourceResponse(BaseModel):
     description: Optional[str] = Field(None, description="Description")
     file_path: Optional[str] = Field(None, description="Path to uploaded file")
     file_size: Optional[int] = Field(None, description="File size in bytes")
+    file_name: Optional[str] = Field(None, description="file name")
     is_active: bool = Field(..., description="Is active")
     is_connected: bool = Field(..., description="Connection test passed")
     created_at: datetime = Field(..., description="Creation date")
