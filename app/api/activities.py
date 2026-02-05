@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=[""])  # ✅ NO PREFIX HERE
 
 
-@router.get("/activities")
+@router.get("/")
 async def list_activities(
         db: Session = Depends(get_db),
         project_id: Optional[str] = Query(None),
@@ -78,7 +78,7 @@ async def list_activities(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
 async def create_activity(
         activity_data: ActivityCreate,
         db: Session = Depends(get_db)
@@ -131,7 +131,7 @@ async def create_activity(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/activities/{activity_id}", response_model=ActivityResponse)
+@router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
         activity_id: str,
         db: Session = Depends(get_db)
@@ -176,7 +176,7 @@ async def get_activity(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.delete("/activities/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_activity(
         activity_id: str,
         db: Session = Depends(get_db)
@@ -212,7 +212,7 @@ async def delete_activity(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/activities/project/{project_id}/summary")
+@router.get("/project/{project_id}/summary")
 async def get_project_activity_summary(
         project_id: str,
         db: Session = Depends(get_db)
