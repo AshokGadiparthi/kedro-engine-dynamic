@@ -18,6 +18,13 @@ from app.schemas.eda_schemas import (
     SummaryResponse, StatisticsSimpleResponse, QualityResponse, CorrelationsResponse
 )
 
+from app.models.models import Dataset
+from pathlib import Path
+import os
+from app.core.database import SessionLocal
+
+KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
+
 
 router = APIRouter(prefix="", tags=["EDA"])
 logger = logging.getLogger(__name__)
@@ -463,21 +470,23 @@ async def get_correlations(request: Request, dataset_id: str, threshold: float =
 # PHASE 2: ADVANCED STATISTICS & VISUALIZATIONS
 # ============================================================================
 
-def load_dataset_for_phase2(dataset_id: str) -> pd.DataFrame:
-    """Load dataset from cache or file for Phase 2 analysis"""
-    from app.api.datasets import dataset_cache, UPLOAD_DIR
-    import os
+def load_dataset_for_phase2(dataset_id: str, db: Session) -> pd.DataFrame:
+    """Load dataset from database table and file"""
 
-    file_path = f"{UPLOAD_DIR}/{dataset_id}.csv"
+    # 1. Query database for dataset metadata
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}")
 
-    if dataset_id in dataset_cache:
-        return dataset_cache[dataset_id]
-    elif os.path.exists(file_path):
-        df = pd.read_csv(file_path)
-        dataset_cache[dataset_id] = df
-        return df
-    else:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    # 2. Build file path from database kedro_path
+    file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.kedro_path)
+
+    # 3. Verify file exists
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+    # 4. Load CSV
+    return pd.read_csv(file_path)
 
 
 # ============================================================================
@@ -494,8 +503,8 @@ async def get_phase2_histograms(
     """✅ Phase 2: Get histogram data for visualization"""
     try:
         logger.info(f"📊 Phase 2 Histograms requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         histogram_data = phase2.get_histograms(bins=bins)
         histogram_data["dataset_id"] = dataset_id
@@ -524,8 +533,8 @@ async def get_phase2_outliers(
     """✅ Phase 2: Detect outliers using IQR method"""
     try:
         logger.info(f"🔍 Phase 2 Outliers requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         outliers_data = phase2.get_outliers()
         outliers_data["dataset_id"] = dataset_id
@@ -554,8 +563,8 @@ async def get_phase2_normality(
     """✅ Phase 2: Test normality of numeric columns (Shapiro-Wilk)"""
     try:
         logger.info(f"📈 Phase 2 Normality tests requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         normality_data = phase2.get_normality_tests()
         normality_data["dataset_id"] = dataset_id
@@ -584,8 +593,8 @@ async def get_phase2_distributions(
     """✅ Phase 2: Analyze distribution characteristics"""
     try:
         logger.info(f"🎯 Phase 2 Distribution analysis requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         distribution_data = phase2.get_distribution_analysis()
         distribution_data["dataset_id"] = dataset_id
@@ -615,8 +624,8 @@ async def get_phase2_categorical(
     """✅ Phase 2: Get distribution of categorical columns"""
     try:
         logger.info(f"📋 Phase 2 Categorical distributions requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         categorical_data = phase2.get_categorical_distributions(top_n=top_n)
         categorical_data["dataset_id"] = dataset_id
@@ -646,8 +655,8 @@ async def get_phase2_correlations_enhanced(
     """✅ Phase 2: Enhanced correlation analysis with p-values"""
     try:
         logger.info(f"🔗 Phase 2 Enhanced correlations requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
         correlation_data = phase2.get_enhanced_correlations(threshold=threshold)
         correlation_data["dataset_id"] = dataset_id
@@ -676,8 +685,8 @@ async def get_phase2_complete(
     """✅ Phase 2: Get COMPLETE Phase 2 analysis (all features)"""
     try:
         logger.info(f"📊 Complete Phase 2 analysis requested for dataset: {dataset_id}")
-
-        df = load_dataset_for_phase2(dataset_id)
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
         phase2 = Phase2StatisticsExtended(df)
 
         complete_data = {
