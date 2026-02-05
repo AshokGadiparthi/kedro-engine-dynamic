@@ -172,6 +172,7 @@ class DatabaseManager:
                         result_type TEXT,
                         result_data TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (dataset_id) REFERENCES datasets(id),
                         FOREIGN KEY (eda_job_id) REFERENCES eda_jobs(id)
                     )
