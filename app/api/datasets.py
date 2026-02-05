@@ -65,11 +65,10 @@ async def create_dataset(
     1. Create project-specific directory: {KEDRO}/data/01_raw/{project_id}/
     2. Save file with original filename (overwrites if exists)
     3. Store Kedro-relative path in database
-    4. Return path for job parameter
+    4. Return paths for job parameter
     """
 
     dataset_id = str(uuid4())
-
     logger.info(f"📥 Uploading dataset: {name} for project: {project_id}")
 
     try:
@@ -83,29 +82,32 @@ async def create_dataset(
         full_file_path = os.path.join(project_dir, original_filename)
 
         contents = await file.read()
-
         with open(full_file_path, "wb") as f:
             f.write(contents)
 
+        # ✅ Step 2.1: Hard validation (prevents “file not found” later)
+        if not os.path.exists(full_file_path) or os.path.getsize(full_file_path) == 0:
+            raise RuntimeError(f"File write failed or empty: {full_file_path}")
+
         logger.info(f"✅ File saved: {full_file_path}")
 
-        # ✅ Step 3: Create Kedro-relative path for parameters
-        # This path will be used by Kedro pipeline
+        # ✅ Step 3: Kedro-relative path for parameters (good for Kedro project runs)
         kedro_relative_path = f"data/01_raw/{project_id}/{original_filename}"
         logger.info(f"📍 Kedro path: {kedro_relative_path}")
 
-        # ✅ Step 4: ANALYZE the CSV file
+        # ✅ Step 4: ANALYZE the file (only if CSV)
+        row_count = 0
+        column_count = 0
         try:
-            df = pd.read_csv(full_file_path)
-            row_count = len(df)
-            column_count = len(df.columns)
-            logger.info(f"✅ Analysis: {row_count} rows, {column_count} columns")
-
-            # Cache it
-            dataset_cache[dataset_id] = df
+            if original_filename.lower().endswith(".csv"):
+                df = pd.read_csv(full_file_path)
+                row_count = len(df)
+                column_count = len(df.columns)
+                logger.info(f"✅ Analysis: {row_count} rows, {column_count} columns")
+                dataset_cache[dataset_id] = df
+            else:
+                logger.info("ℹ️ Skipping CSV analysis (not a CSV file)")
         except Exception as e:
-            row_count = 0
-            column_count = 0
             logger.warning(f"⚠️ Could not analyze CSV: {e}")
 
         # ✅ Step 5: Create dataset record in database
@@ -114,7 +116,7 @@ async def create_dataset(
             name=name,
             project_id=project_id,
             description=description or "",
-            file_name=original_filename,  # Store original filename
+            file_name=original_filename,
             file_size_bytes=len(contents),
             created_at=datetime.now()
         )
@@ -124,6 +126,7 @@ async def create_dataset(
 
         logger.info(f"✅ Dataset created: {dataset_id}")
 
+        # ✅ IMPORTANT: return both abs path and kedro path
         return {
             "id": new_dataset.id,
             "name": new_dataset.name,
@@ -132,13 +135,23 @@ async def create_dataset(
             "file_name": new_dataset.file_name,
             "file_size_bytes": new_dataset.file_size_bytes,
             "created_at": new_dataset.created_at.isoformat(),
-            "kedro_path": kedro_relative_path  # ✅ Return for job parameter
+
+            # ✅ for Kedro run (relative)
+            "kedro_path": kedro_relative_path,
+
+            # ✅ for Celery/Kedro subprocess safety (absolute)
+            "abs_path": full_file_path,
+
+            # optional debug
+            "row_count": row_count,
+            "column_count": column_count,
         }
 
     except Exception as e:
         logger.error(f"❌ Error uploading dataset: {str(e)}", exc_info=True)
         db.rollback()
-        return {"error": f"Failed to upload dataset: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Failed to upload dataset: {str(e)}")
+
 
 
 @router.get("/{dataset_id}/preview")
