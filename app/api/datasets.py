@@ -1,4 +1,4 @@
-"""Datasets API Routes"""
+"""Datasets API Routes - Saves to Kedro Project"""
 from fastapi import APIRouter, Depends, Path, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from uuid import uuid4
@@ -8,18 +8,29 @@ import os
 import pandas as pd
 import numpy as np
 import io
+import logging
 from app.core.database import get_db
 from app.models.models import Dataset
 from app.schemas import DatasetCreate, DatasetResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="", tags=["Datasets"])
 
-# Directory to store uploaded files
-UPLOAD_DIR = "data/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# ============================================================================
+# KEDRO PROJECT PATH - Change this to your Kedro project root
+# ============================================================================
+KEDRO_PROJECT_PATH = "/home/ashok/work/latest/full/kedro-ml-engine-integrated"
+KEDRO_RAW_DATA_DIR = os.path.join(KEDRO_PROJECT_PATH, "data", "01_raw")
+
+# Ensure base directory exists
+os.makedirs(KEDRO_RAW_DATA_DIR, exist_ok=True)
+
+logger.info(f"✅ Kedro raw data directory: {KEDRO_RAW_DATA_DIR}")
 
 # In-memory storage for dataset content
 dataset_cache = {}
+
 
 @router.get("/", response_model=list)
 async def list_datasets(db: Session = Depends(get_db)):
@@ -38,6 +49,7 @@ async def list_datasets(db: Session = Depends(get_db)):
         for d in datasets
     ]
 
+
 @router.post("/")
 async def create_dataset(
         file: UploadFile = File(...),
@@ -46,53 +58,88 @@ async def create_dataset(
         description: Optional[str] = Form(None),
         db: Session = Depends(get_db)
 ):
-    """Create dataset - ANALYZES file and extracts statistics"""
+    """
+    Create dataset and save to Kedro project path
+
+    Flow:
+    1. Create project-specific directory: {KEDRO}/data/01_raw/{project_id}/
+    2. Save file with original filename (overwrites if exists)
+    3. Store Kedro-relative path in database
+    4. Return path for job parameter
+    """
 
     dataset_id = str(uuid4())
 
-    # Save file first
-    file_path = f"{UPLOAD_DIR}/{dataset_id}.csv"
-    contents = await file.read()
+    logger.info(f"📥 Uploading dataset: {name} for project: {project_id}")
 
-    with open(file_path, "wb") as f:
-        f.write(contents)
-
-    # ANALYZE the CSV file
     try:
-        df = pd.read_csv(file_path)
-        row_count = len(df)
-        column_count = len(df.columns)
+        # ✅ Step 1: Create project directory structure
+        project_dir = os.path.join(KEDRO_RAW_DATA_DIR, project_id)
+        os.makedirs(project_dir, exist_ok=True)
+        logger.info(f"📁 Created project directory: {project_dir}")
 
-        # Cache it
-        dataset_cache[dataset_id] = df
+        # ✅ Step 2: Save file with original filename (allows overwrite)
+        original_filename = file.filename
+        full_file_path = os.path.join(project_dir, original_filename)
+
+        contents = await file.read()
+
+        with open(full_file_path, "wb") as f:
+            f.write(contents)
+
+        logger.info(f"✅ File saved: {full_file_path}")
+
+        # ✅ Step 3: Create Kedro-relative path for parameters
+        # This path will be used by Kedro pipeline
+        kedro_relative_path = f"data/01_raw/{project_id}/{original_filename}"
+        logger.info(f"📍 Kedro path: {kedro_relative_path}")
+
+        # ✅ Step 4: ANALYZE the CSV file
+        try:
+            df = pd.read_csv(full_file_path)
+            row_count = len(df)
+            column_count = len(df.columns)
+            logger.info(f"✅ Analysis: {row_count} rows, {column_count} columns")
+
+            # Cache it
+            dataset_cache[dataset_id] = df
+        except Exception as e:
+            row_count = 0
+            column_count = 0
+            logger.warning(f"⚠️ Could not analyze CSV: {e}")
+
+        # ✅ Step 5: Create dataset record in database
+        new_dataset = Dataset(
+            id=dataset_id,
+            name=name,
+            project_id=project_id,
+            description=description or "",
+            file_name=original_filename,  # Store original filename
+            file_size_bytes=len(contents),
+            created_at=datetime.now()
+        )
+        db.add(new_dataset)
+        db.commit()
+        db.refresh(new_dataset)
+
+        logger.info(f"✅ Dataset created: {dataset_id}")
+
+        return {
+            "id": new_dataset.id,
+            "name": new_dataset.name,
+            "project_id": new_dataset.project_id,
+            "description": new_dataset.description,
+            "file_name": new_dataset.file_name,
+            "file_size_bytes": new_dataset.file_size_bytes,
+            "created_at": new_dataset.created_at.isoformat(),
+            "kedro_path": kedro_relative_path  # ✅ Return for job parameter
+        }
+
     except Exception as e:
-        row_count = 0
-        column_count = 0
-        print(f"Warning: Could not analyze CSV: {e}")
+        logger.error(f"❌ Error uploading dataset: {str(e)}", exc_info=True)
+        db.rollback()
+        return {"error": f"Failed to upload dataset: {str(e)}"}
 
-    # Create dataset record WITH statistics
-    new_dataset = Dataset(
-        id=dataset_id,
-        name=name,
-        project_id=project_id,
-        description=description or "",
-        file_name=file.filename,
-        file_size_bytes=len(contents),
-        created_at=datetime.now()
-    )
-    db.add(new_dataset)
-    db.commit()
-    db.refresh(new_dataset)
-
-    return {
-        "id": new_dataset.id,
-        "name": new_dataset.name,
-        "project_id": new_dataset.project_id,
-        "description": new_dataset.description,
-        "file_name": new_dataset.file_name,
-        "file_size_bytes": new_dataset.file_size_bytes,
-        "created_at": new_dataset.created_at.isoformat()
-    }
 
 @router.get("/{dataset_id}/preview")
 async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: Session = Depends(get_db)):
@@ -103,16 +150,24 @@ async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: 
 
     df = None
 
+    # ✅ Build path from project_id and filename (Kedro structure)
+    file_path = os.path.join(
+        KEDRO_RAW_DATA_DIR,
+        dataset.project_id,
+        dataset.file_name
+    )
+
     # Load from cache or file
     if dataset_id in dataset_cache:
         df = dataset_cache[dataset_id]
     else:
-        file_path = f"{UPLOAD_DIR}/{dataset_id}.csv"
         if os.path.exists(file_path):
             try:
                 df = pd.read_csv(file_path, nrows=rows)
                 dataset_cache[dataset_id] = df
+                logger.info(f"✅ Loaded dataset preview: {dataset_id}")
             except Exception as e:
+                logger.error(f"❌ Could not read file: {str(e)}")
                 return {"error": f"Could not read file: {str(e)}"}
 
     if df is None or df.empty:
@@ -138,6 +193,7 @@ async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: 
         "preview_rows": len(rows_data),
     }
 
+
 @router.get("/{dataset_id}/quality")
 async def get_dataset_quality(dataset_id: str = Path(...), db: Session = Depends(get_db)):
     """Get REAL data quality analysis with detailed metrics"""
@@ -147,17 +203,25 @@ async def get_dataset_quality(dataset_id: str = Path(...), db: Session = Depends
 
     df = None
 
+    # ✅ Build path from project_id and filename (Kedro structure)
+    file_path = os.path.join(
+        KEDRO_RAW_DATA_DIR,
+        dataset.project_id,
+        dataset.file_name
+    )
+
     # Load from cache or file
     if dataset_id in dataset_cache:
         df = dataset_cache[dataset_id]
     else:
-        file_path = f"{UPLOAD_DIR}/{dataset_id}.csv"
         if os.path.exists(file_path):
             try:
                 df = pd.read_csv(file_path)
                 dataset_cache[dataset_id] = df
-            except:
-                pass
+                logger.info(f"✅ Loaded dataset for quality analysis: {dataset_id}")
+            except Exception as e:
+                logger.error(f"❌ Could not read file: {str(e)}")
+                return {"error": f"Could not read file: {str(e)}"}
 
     if df is None or df.empty:
         return {"error": "No data available"}
@@ -201,3 +265,40 @@ async def get_dataset_quality(dataset_id: str = Path(...), db: Session = Depends
         "overall_quality_score": round((completeness + uniqueness + consistency) / 3, 2),
         "column_quality": column_quality
     }
+
+
+@router.delete("/{dataset_id}")
+async def delete_dataset(dataset_id: str = Path(...), db: Session = Depends(get_db)):
+    """Delete dataset and its file from Kedro path"""
+    try:
+        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+        if not dataset:
+            return {"error": "Dataset not found"}
+
+        # ✅ Delete file from Kedro path
+        file_path = os.path.join(
+            KEDRO_RAW_DATA_DIR,
+            dataset.project_id,
+            dataset.file_name
+        )
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"🗑️ Deleted file: {file_path}")
+
+        # ✅ Delete from cache
+        if dataset_id in dataset_cache:
+            del dataset_cache[dataset_id]
+
+        # ✅ Delete from database
+        db.delete(dataset)
+        db.commit()
+
+        logger.info(f"✅ Dataset deleted: {dataset_id}")
+
+        return {"message": "Dataset deleted successfully"}
+
+    except Exception as e:
+        logger.error(f"❌ Error deleting dataset: {str(e)}", exc_info=True)
+        db.rollback()
+        return {"error": f"Failed to delete dataset: {str(e)}"}

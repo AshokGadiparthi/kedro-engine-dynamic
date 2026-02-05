@@ -1,8 +1,10 @@
 """
 FastAPI endpoints for job management and Kedro pipeline execution
 
-FIXED: Removed 'description' parameter from create_job() call
-All other functionality preserved
+✅ COMPLETE INTEGRATION:
+- Accepts filepath as query parameter OR in request body
+- Builds dynamic parameters for Kedro
+- Supports both upload-to-job workflow and direct filepath submission
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -20,10 +22,9 @@ logger = logging.getLogger(__name__)
 db_manager = JobManager()
 
 # ============================================================================
-# FIXED: NO PREFIX HERE - main.py will add prefix="/api/v1/jobs"
+# Router Configuration
 # ============================================================================
 router = APIRouter(tags=["jobs"])
-
 logger.info("✅ Jobs router created")
 
 # ============================================================================
@@ -34,11 +35,13 @@ class RunPipelineRequest(BaseModel):
     """Request model for running a Kedro pipeline"""
     parameters: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
+    filepath: Optional[str] = None  # ✅ NEW: For data_loading pipeline
 
     class Config:
         schema_extra = {
             "example": {
-                "parameters": {},
+                "filepath": "data/01_raw/project_123/users.csv",
+                "parameters": {"data_loading": {"test_size": 0.25}},
                 "description": "Load multi-table dataset"
             }
         }
@@ -77,6 +80,49 @@ class PipelineListResponse(BaseModel):
 
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def build_job_parameters(
+        pipeline_name: str,
+        request: Optional[RunPipelineRequest] = None
+) -> Dict[str, Any]:
+    """
+    Build final parameters dict for job creation
+
+    Handles dynamic filepath for data_loading pipeline
+    Merges with user-provided parameters
+
+    Args:
+        pipeline_name: Name of pipeline
+        request: Request with optional filepath and parameters
+
+    Returns:
+        Final parameters dict with filepath and user params
+    """
+    final_params = {}
+
+    # ✅ Handle data_loading pipeline with filepath
+    if pipeline_name == "data_loading" and request and request.filepath:
+        final_params = {
+            "data_loading": {
+                "filepath": request.filepath
+            }
+        }
+        logger.info(f"📁 Using dynamic filepath: {request.filepath}")
+
+    # Merge user-provided parameters
+    if request and request.parameters:
+        if "data_loading" in request.parameters and "data_loading" in final_params:
+            # Merge nested dicts
+            final_params["data_loading"].update(request.parameters["data_loading"])
+        final_params.update(request.parameters)
+
+    logger.info(f"📦 Final parameters: {final_params}")
+    return final_params
+
+
+# ============================================================================
 # HEALTH CHECK
 # ============================================================================
 
@@ -97,6 +143,7 @@ def health_check():
 @router.post("/run-pipeline/{pipeline_name}", status_code=202)
 def run_pipeline(
         pipeline_name: str,
+        filepath: Optional[str] = None,  # ✅ Query parameter
         request: Optional[RunPipelineRequest] = None
 ):
     """
@@ -104,38 +151,48 @@ def run_pipeline(
 
     Args:
         pipeline_name: Name of the Kedro pipeline to execute
+        filepath: Optional filepath as query parameter (for data_loading)
         request: Optional request body with parameters and description
 
     Returns:
         Job information with status "pending" and job_id
 
-    Example:
-        POST /api/v1/jobs/run-pipeline/data_loading
-        {
-            "parameters": {},
-            "description": "Load multi-table dataset"
-        }
+    Examples (CURL):
 
-        Response (202 Accepted):
-        {
-            "id": "3b9c5987-2de6-4f9f-9828-85b55d6ca060",
-            "pipeline_name": "data_loading",
-            "status": "pending",
-            "celery_task_id": "abc123xyz",
-            "message": "Pipeline 'data_loading' queued for execution"
-        }
+        Option 1 - Query Parameter (simplest):
+        curl -X POST "http://192.168.1.147:8000/api/v1/jobs/run-pipeline/data_loading?filepath=data/01_raw/project_123/users.csv"
+
+        Option 2 - Request Body (JSON):
+        curl -X POST "http://192.168.1.147:8000/api/v1/jobs/run-pipeline/data_loading" \\
+          -H "Content-Type: application/json" \\
+          -d '{"filepath": "data/01_raw/project_123/users.csv"}'
+
+        Option 3 - With Additional Parameters:
+        curl -X POST "http://192.168.1.147:8000/api/v1/jobs/run-pipeline/data_loading?filepath=data/01_raw/project_123/users.csv" \\
+          -H "Content-Type: application/json" \\
+          -d '{"parameters": {"data_loading": {"test_size": 0.25}}}'
     """
 
     logger.info(f"📊 API Request: Run pipeline '{pipeline_name}'")
+    logger.info(f"📁 Query filepath: {filepath}")
 
     try:
+        # ✅ Handle filepath from query parameter
+        if filepath:
+            if not request:
+                request = RunPipelineRequest(filepath=filepath)
+            else:
+                request.filepath = filepath  # Override with query param
+
+        # ✅ Build parameters with dynamic filepath
+        job_parameters = build_job_parameters(pipeline_name, request)
+
         # Create job in database
         logger.info(f"Creating job in database for pipeline: {pipeline_name}")
 
-        # FIXED: Removed 'description' parameter - JobManager.create_job() doesn't accept it
         job = db_manager.create_job(
             pipeline_name=pipeline_name,
-            parameters=request.parameters if request else {},
+            parameters=job_parameters,  # ✅ NOW HAS DYNAMIC FILEPATH
             user_id="api_user"
         )
 
@@ -146,7 +203,7 @@ def run_pipeline(
         task = execute_pipeline.delay(
             job_id=job['id'],
             pipeline_name=pipeline_name,
-            parameters=request.parameters if request else {}
+            parameters=job_parameters  # ✅ PASS FINAL PARAMETERS
         )
 
         logger.info(f"✅ Task queued: {task.id}")
@@ -176,7 +233,7 @@ def run_pipeline(
 # ============================================================================
 
 @router.post("/data-loading", status_code=202, tags=["data"])
-def run_data_loading(request: Optional[RunPipelineRequest] = None):
+def run_data_loading(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """
     Run data_loading pipeline specifically
 
@@ -185,64 +242,67 @@ def run_data_loading(request: Optional[RunPipelineRequest] = None):
     - Validates data formats
     - Prepares train/test splits
 
-    Example:
-        POST /api/v1/jobs/data-loading
-        {
-            "parameters": {},
-            "description": "Load and prepare data"
-        }
+    CURL Examples:
+
+        1. Simple - Just filepath as query param:
+        curl -X POST "http://192.168.1.147:8000/api/v1/jobs/data-loading?filepath=data/01_raw/project_123/users.csv"
+
+        2. With JSON body:
+        curl -X POST "http://192.168.1.147:8000/api/v1/jobs/data-loading" \\
+          -H "Content-Type: application/json" \\
+          -d '{"filepath": "data/01_raw/project_123/users.csv"}'
     """
-    logger.info(f"📊 API Request: Run data_loading pipeline")
-    return run_pipeline("data_loading", request)
+    logger.info(f"📊 API Request: Run data_loading pipeline with filepath={filepath}")
+    return run_pipeline("data_loading", filepath=filepath, request=request)
 
 
 @router.post("/data-validation", status_code=202, tags=["data"])
-def run_data_validation(request: Optional[RunPipelineRequest] = None):
+def run_data_validation(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run data_validation pipeline"""
     logger.info(f"📊 API Request: Run data_validation pipeline")
-    return run_pipeline("data_validation", request)
+    return run_pipeline("data_validation", filepath=filepath, request=request)
 
 
 @router.post("/data-cleaning", status_code=202, tags=["data"])
-def run_data_cleaning(request: Optional[RunPipelineRequest] = None):
+def run_data_cleaning(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run data_cleaning pipeline"""
     logger.info(f"📊 API Request: Run data_cleaning pipeline")
-    return run_pipeline("data_cleaning", request)
+    return run_pipeline("data_cleaning", filepath=filepath, request=request)
 
 
 @router.post("/feature-engineering", status_code=202, tags=["features"])
-def run_feature_engineering(request: Optional[RunPipelineRequest] = None):
+def run_feature_engineering(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run feature_engineering pipeline"""
     logger.info(f"📊 API Request: Run feature_engineering pipeline")
-    return run_pipeline("feature_engineering", request)
+    return run_pipeline("feature_engineering", filepath=filepath, request=request)
 
 
 @router.post("/feature-selection", status_code=202, tags=["features"])
-def run_feature_selection(request: Optional[RunPipelineRequest] = None):
+def run_feature_selection(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run feature_selection pipeline"""
     logger.info(f"📊 API Request: Run feature_selection pipeline")
-    return run_pipeline("feature_selection", request)
+    return run_pipeline("feature_selection", filepath=filepath, request=request)
 
 
 @router.post("/model-training", status_code=202, tags=["models"])
-def run_model_training(request: Optional[RunPipelineRequest] = None):
+def run_model_training(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run model_training pipeline"""
     logger.info(f"📊 API Request: Run model_training pipeline")
-    return run_pipeline("model_training", request)
+    return run_pipeline("model_training", filepath=filepath, request=request)
 
 
 @router.post("/algorithms", status_code=202, tags=["models"])
-def run_algorithms(request: Optional[RunPipelineRequest] = None):
+def run_algorithms(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run algorithms pipeline"""
     logger.info(f"📊 API Request: Run algorithms pipeline")
-    return run_pipeline("algorithms", request)
+    return run_pipeline("algorithms", filepath=filepath, request=request)
 
 
 @router.post("/ensemble", status_code=202, tags=["models"])
-def run_ensemble(request: Optional[RunPipelineRequest] = None):
+def run_ensemble(filepath: Optional[str] = None, request: Optional[RunPipelineRequest] = None):
     """Run ensemble pipeline"""
     logger.info(f"📊 API Request: Run ensemble pipeline")
-    return run_pipeline("ensemble", request)
+    return run_pipeline("ensemble", filepath=filepath, request=request)
 
 
 # ============================================================================
@@ -344,7 +404,7 @@ def list_pipelines():
     List all available Kedro pipelines
 
     Returns:
-        List of 23 available pipelines with descriptions
+        List of available pipelines with descriptions
 
     Example:
         GET /api/v1/jobs/pipelines/list
@@ -519,4 +579,4 @@ def get_pipeline_performance():
     return performance
 
 
-logger.info("✅ Jobs router fully initialized with ALL endpoints")
+logger.info("✅ Jobs router fully initialized with filepath support")
