@@ -63,10 +63,8 @@ def get_user_id_from_token(request: Request) -> str:
 async def run_eda_analysis(job_id: str, dataset_id: str, db: Session):
     """Background task to run EDA analysis and store in database"""
     try:
-        from app.api.datasets import dataset_cache, UPLOAD_DIR
+        from app.api.datasets import dataset_cache
         import os
-
-        file_path = f"{UPLOAD_DIR}/{dataset_id}.csv"
 
         # Get original job data
         original_job_data = await cache_manager.get(f"eda:job:{job_id}")
@@ -77,16 +75,8 @@ async def run_eda_analysis(job_id: str, dataset_id: str, db: Session):
         original_job = original_job_data if isinstance(original_job_data, dict) else json.loads(original_job_data)
 
         # Load dataset
-        if dataset_id in dataset_cache:
-            df = dataset_cache[dataset_id]
-        elif os.path.exists(file_path):
-            df = pd.read_csv(file_path)
-            dataset_cache[dataset_id] = df
-        else:
-            failed_job = {**original_job, "status": "failed", "error": "Dataset file not found", "progress": 0}
-            await cache_manager.set(f"eda:job:{job_id}", failed_job, ttl=86400)
-            logger.error(f"❌ Dataset file not found: {file_path}")
-            return
+        db = SessionLocal()
+        df = load_dataset_for_phase2(dataset_id, db)
 
         # Update job status
         processing_job = {
