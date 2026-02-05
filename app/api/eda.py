@@ -468,8 +468,8 @@ def load_dataset_for_phase2(dataset_id: str, db: Session) -> pd.DataFrame:
     if not dataset:
         raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}")
 
-    # 2. Build file path from database kedro_path
-    file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.kedro_path)
+    # 2. Build file path from database file_path
+    file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.file_path)
 
     # 3. Verify file exists
     if not os.path.exists(file_path):
