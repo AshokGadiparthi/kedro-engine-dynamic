@@ -160,6 +160,7 @@ class DatabaseManager:
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS eda_results (
                         id TEXT PRIMARY KEY,
+                        user_id TEXT,
                         dataset_id TEXT NOT NULL,
                         eda_job_id TEXT NOT NULL,
                         phase INTEGER,
