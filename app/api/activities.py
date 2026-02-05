@@ -13,6 +13,7 @@ import logging
 from app.core.database import get_db
 from app.models.models import Activity
 from app.schemas import ActivityCreate, ActivityResponse
+import json  # Add at top if not there
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ async def list_activities(
                 entity_type=a.entity_type,
                 entity_id=a.entity_id,
                 #entity_name=a.entity_name,
-                details=a.details,
+                details=json.loads(a.details) if a.details else None,  # ← PARSE JSON,
                 created_at=a.created_at.isoformat()
             )
             for a in activities
