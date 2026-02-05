@@ -66,7 +66,7 @@ async def list_activities(
                 project_id=a.project_id,
                 action=a.action,
                 entity_type=a.entity_type,
-                entity_id=a.entity_id,
+                #entity_id=a.entity_id,
                 entity_name=a.entity_name,
                 details=a.details,
                 created_at=a.created_at.isoformat()

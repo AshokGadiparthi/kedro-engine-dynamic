@@ -106,7 +106,6 @@ class ActivityCreate(BaseModel):
     action: str
     entity_type: str
     entity_id: str
-    entity_name: str
     details: Optional[dict] = None
 
 class ActivityResponse(BaseModel):
@@ -116,7 +115,6 @@ class ActivityResponse(BaseModel):
     action: str
     entity_type: str
     entity_id: str
-    entity_name: str
     details: Optional[dict] = None
     created_at: str
 
