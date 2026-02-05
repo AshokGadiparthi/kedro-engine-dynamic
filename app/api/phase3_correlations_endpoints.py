@@ -52,12 +52,15 @@ KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrat
 
 def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
     """
-    Get dataset from database - CUSTOMIZED for YOUR schema
+    Get dataset from database - FIXED VERSION
+
+    ✅ FIXED: Corrected file path retrieval logic
 
     Your Dataset model has these attributes:
     - id: Dataset ID
     - project_id: Project reference
-    - file_name: ✅ THE FILE PATH/NAME
+    - file_name: Original filename
+    - kedro_path: ✅ CORRECT PATH (data/01_raw/{project_id}/{filename})
     - created_at: Creation timestamp
     - description: Description text
     - name: Dataset name
@@ -82,58 +85,50 @@ def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
             logger.warning(f"⚠️ Dataset not found: {dataset_id}")
             return None
 
-        # ✅ YOUR SCHEMA: Use file_name attribute
+        # ✅ FIX: Get the correct path from your Dataset model
+        # Your database has: kedro_path = "data/01_raw/{project_id}/{filename}"
+
         file_path = None
 
-        # Try primary attribute first (YOUR schema)
-        if hasattr(dataset_record, 'file_path') and dataset_record.file_path:
+        # Try to get kedro_path (your actual path column)
+        if hasattr(dataset_record, 'kedro_path') and dataset_record.kedro_path:
+            file_path = dataset_record.kedro_path
+            logger.info(f"✅ Using kedro_path: {file_path}")
+
+        # Fallback: Try other common path attributes
+        elif hasattr(dataset_record, 'file_path') and dataset_record.file_path:
             file_path = dataset_record.file_path
-            logger.info(f"✅ Found file path in attribute: 'file_path'")
+            logger.info(f"✅ Using file_path: {file_path}")
 
-        # 2. Build file path from database file_path
-        file_path = os.path.join(str(KEDRO_PROJECT_PATH), file_path)
+        elif hasattr(dataset_record, 'path') and dataset_record.path:
+            file_path = dataset_record.path
+            logger.info(f"✅ Using path: {file_path}")
 
-        # Fallback to other common attributes if needed
-        if not file_path:
-            possible_attributes = [
-                'file_path',      # Alternative names
-                'storage_path',
-                'path',
-                'file_location',
-                'upload_path',
-                'data_path',
-                'filepath'
-            ]
-
-            for attr_name in possible_attributes:
-                if hasattr(dataset_record, attr_name):
-                    potential_path = getattr(dataset_record, attr_name)
-                    if potential_path:
-                        file_path = potential_path
-                        logger.info(f"✅ Found file path in attribute: '{attr_name}'")
-                        break
-
-        # If still no file path found, log available attributes
+        # If still no path, log available attributes
         if not file_path:
             available_attrs = [k for k in dataset_record.__dict__.keys() if not k.startswith('_')]
             logger.error(f"❌ No file path found in Dataset attributes")
             logger.error(f"   Available: {available_attrs}")
-            logger.error(f"   Expected one of: file_name, file_path, storage_path, path, file_location")
+            logger.error(f"   Expected one of: kedro_path, file_path, path")
             raise HTTPException(
                 status_code=500,
-                detail=f"Cannot determine file path. Dataset attributes: {available_attrs}"
+                detail=f"Cannot determine file path from dataset. Available attributes: {available_attrs}"
             )
 
+        # ✅ FIX: Build FULL path AFTER we have the relative path
+        full_file_path = os.path.join(str(KEDRO_PROJECT_PATH), file_path)
+        logger.info(f"📍 Full file path: {full_file_path}")
+
         # Verify file exists
-        if not os.path.exists(file_path):
-            logger.error(f"❌ File not found at path: {file_path}")
-            logger.error(f"   File path type: {type(file_path)}")
-            logger.error(f"   File path value: {file_path}")
-            raise HTTPException(status_code=500, detail=f"Dataset file not found: {file_path}")
+        if not os.path.exists(full_file_path):
+            logger.error(f"❌ File not found at path: {full_file_path}")
+            logger.error(f"   Relative path: {file_path}")
+            logger.error(f"   KEDRO_PROJECT_PATH: {KEDRO_PROJECT_PATH}")
+            raise HTTPException(status_code=500, detail=f"Dataset file not found: {full_file_path}")
 
         # Load the CSV file
-        logger.info(f"📖 Loading CSV from: {file_path}")
-        df = pd.read_csv(file_path)
+        logger.info(f"📖 Loading CSV from: {full_file_path}")
+        df = pd.read_csv(full_file_path)
         logger.info(f"✅ Loaded dataset {dataset_id} with shape {df.shape}")
         return df
 
@@ -142,6 +137,7 @@ def get_dataset_from_db(dataset_id: str, db: Session) -> Optional[pd.DataFrame]:
     except Exception as e:
         logger.error(f"❌ Error retrieving dataset {dataset_id}: {str(e)}")
         logger.error(f"   Exception type: {type(e).__name__}")
+        logger.error(f"   Exception details: {str(e)}", exc_info=True)
         return None
 
 
