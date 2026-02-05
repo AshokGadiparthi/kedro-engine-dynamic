@@ -16,7 +16,7 @@ from app.schemas import ActivityCreate, ActivityResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Activities"])  # ✅ NO PREFIX HERE
+router = APIRouter(tags=[""])  # ✅ NO PREFIX HERE
 
 
 @router.get("/activities")
