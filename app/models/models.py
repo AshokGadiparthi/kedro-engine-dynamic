@@ -64,7 +64,7 @@ class Activity(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="activities")
+    #user = relationship("User", back_populates="activities")
     project = relationship("Project", back_populates="activities")  # ✅ ADDED
 
     def __repr__(self):
