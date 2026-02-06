@@ -722,7 +722,7 @@ def get_current_algorithm(logs: list) -> str:
 # REST ENDPOINTS
 # ============================================================================
 
-@router.get("/jobs/{job_id}")
+@router.get("/jobs/logs/{job_id}")
 async def get_job_details(job_id: str, db: Session = Depends(get_db)):
     """Get job details including live logs and current algorithm"""
 
