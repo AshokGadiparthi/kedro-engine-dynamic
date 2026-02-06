@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from celery_app import app
 from app.core.job_manager import JobManager
+from app.core.log_handler import setup_job_logger
 import sys
 
 # Configure logging
