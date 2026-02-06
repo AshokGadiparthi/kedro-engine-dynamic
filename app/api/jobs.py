@@ -724,40 +724,40 @@ def get_current_algorithm(logs: list) -> str:
 # ============================================================================
 
 @router.get("/logs/{job_id}")
-async def get_job_details(job_id: str, db: Session = Depends(get_db)):
+async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
     """Get job details including live logs and current algorithm"""
 
     try:
-        # Get job from database
         job = db_manager.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        # Get logs
         logs = read_job_logs(job_id)
+        current_algo = get_current_algorithm(logs)
 
-        # Get current algorithm
-        current_algorithm = get_current_algorithm(logs)
+        # ✅ Safe dict/object access
+        def get_val(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
 
-        # Get total lines
-        total_logs = len(logs)
-
-        # Return job with live data
         return {
-            "id": job.id,
-            "pipeline_name": job.pipeline_name,
-            "status": job.status,
-            "created_at": job.created_at.isoformat(),
-            "updated_at": job.updated_at.isoformat(),
-            "parameters": json.loads(job.parameters) if job.parameters else {},
-            "result": json.loads(job.result) if job.result else {},
+            "id": get_val(job, 'id'),
+            "pipeline_name": get_val(job, 'pipeline_name'),
+            "status": get_val(job, 'status'),
+            "created_at": str(get_val(job, 'created_at')),
+            "updated_at": str(get_val(job, 'updated_at')),
+            "parameters": json.loads(get_val(job, 'parameters', '{}') or '{}'),
+            "result": json.loads(get_val(job, 'result', '{}') or '{}'),
             "logs": {
-                "total_lines": total_logs,
-                "recent_logs": logs[-20:],  # Last 20 logs
-                "current_algorithm": current_algorithm
+                "total_lines": len(logs),
+                "recent_logs": logs[-20:],
+                "current_algorithm": current_algo
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting job details: {e}")
+        logger.error(f"Error getting job details: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
