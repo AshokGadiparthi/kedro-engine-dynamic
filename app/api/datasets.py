@@ -230,7 +230,7 @@ async def get_dataset_columns(
         logger.info(f"📂 Reading from: {full_file_path}")
 
         # 4. Check file exists
-        if not full_file_path.exists():
+        if not os.path.exists(full_file_path):
             logger.error(f"❌ File not found at: {full_file_path}")
             raise HTTPException(
                 status_code=404,
