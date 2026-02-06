@@ -304,7 +304,8 @@ def _safe_resolve_under(base: Path, candidate: Path) -> Path:
         raise HTTPException(status_code=400, detail="Invalid path")
     return cand
 
-def read_json_file(path: Path) -> dict:
+def read_json_file(path) -> dict:
+    path = Path(path)  # <--- convert str -> Path
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {path.name}")
     try:
@@ -312,7 +313,8 @@ def read_json_file(path: Path) -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse JSON: {str(e)}")
 
-def read_csv_file_as_dicts(path: Path) -> list:
+def read_csv_file_as_dicts(path) -> list:
+    path = Path(path)  # <--- convert str -> Path
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {path.name}")
     try:
