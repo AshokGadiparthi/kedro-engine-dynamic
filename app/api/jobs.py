@@ -742,14 +742,49 @@ async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
                 return obj.get(key, default)
             return getattr(obj, key, default)
 
+        # ✅ Get values
+        parameters = get_val(job, 'parameters', {})
+        result = get_val(job, 'result', {})
+
+        # ✅ Parse safely (handle both str and dict)
+        if isinstance(parameters, str):
+            try:
+                parameters = json.loads(parameters)
+            except:
+                parameters = {}
+        elif not parameters:
+            parameters = {}
+
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except:
+                result = {}
+        elif not result:
+            result = {}
+
+        # ✅ Format datetime
+        created_at = get_val(job, 'created_at')
+        updated_at = get_val(job, 'updated_at')
+
+        if hasattr(created_at, 'isoformat'):
+            created_at = created_at.isoformat()
+        else:
+            created_at = str(created_at) if created_at else None
+
+        if hasattr(updated_at, 'isoformat'):
+            updated_at = updated_at.isoformat()
+        else:
+            updated_at = str(updated_at) if updated_at else None
+
         return {
             "id": get_val(job, 'id'),
             "pipeline_name": get_val(job, 'pipeline_name'),
             "status": get_val(job, 'status'),
-            "created_at": str(get_val(job, 'created_at')),
-            "updated_at": str(get_val(job, 'updated_at')),
-            "parameters": json.loads(get_val(job, 'parameters', '{}') or '{}'),
-            "result": json.loads(get_val(job, 'result', '{}') or '{}'),
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "parameters": parameters,  # ✅ Now guaranteed to be dict
+            "result": result,  # ✅ Now guaranteed to be dict
             "logs": {
                 "total_lines": len(logs),
                 "recent_logs": logs[-20:],
