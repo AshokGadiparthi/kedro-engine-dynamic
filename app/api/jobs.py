@@ -909,7 +909,7 @@ async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Job not found")
 
         logs = read_job_logs(job_id)
-        current_algo = get_current_algorithm(logs)
+        #current_algo = get_current_algorithm(logs)
 
         # ✅ Safe dict/object access
         def get_val(obj, key, default=None):
@@ -962,8 +962,7 @@ async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
             "result": result,  # ✅ Now guaranteed to be dict
             "logs": {
                 "total_lines": len(logs),
-                "recent_logs": logs[-20:],
-                "current_algorithm": current_algo
+                "recent_logs": logs
             }
         }
 
