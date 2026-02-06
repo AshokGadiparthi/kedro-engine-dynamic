@@ -177,7 +177,7 @@ def run_pipeline(
           -H "Content-Type: application/json" \\
           -d '{"parameters": {"data_loading": {"test_size": 0.25}}}'
     """
-    file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.file_path)
+    #file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.file_path)
     logger.info(f"📊 API Request: Run pipeline '{pipeline_name}'")
     logger.info(f"📁 Query filepath: {filepath}")
 
