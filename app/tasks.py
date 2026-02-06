@@ -216,6 +216,7 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         # STEP 6: Store results in database
         logger.info(f"\n[STEP 6] Storing results in database...")
         db_manager.update_job_results(job_id, result)
+        db_manager.update_job_status(job_id, "completed")  # ← ADD THIS
         logger.info(f"✅ Results stored for job {job_id}")
 
         # SUCCESS
@@ -252,6 +253,7 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         try:
             error_msg = f"{type(e).__name__}: {str(e)}"
             db_manager.update_job_error(job_id, error_msg)
+            db_manager.update_job_status(job_id, "failed")  # ← ADD THIS
             logger.info(f"✅ Error logged to database")
         except Exception as log_error:
             logger.error(f"❌ Failed to log error: {log_error}")
