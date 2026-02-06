@@ -661,3 +661,100 @@ async def websocket_job_logs(websocket: WebSocket, job_id: str):
 
     finally:
         logger.info(f"❌ WebSocket disconnected for job: {job_id}")
+
+LOGS_DIR = Path("data/job_logs")
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Regex patterns to extract algorithm names
+ALGORITHM_PATTERNS = [
+    r"Training\s+(\w+)\.\.\.",  # "Training LogisticRegression..."
+    r"✅\s+(\w+):\s+Train=",     # "✅ LogisticRegression: Train=0.8037"
+    r"Comparing:\s+Model\s+\d+:\s+(\w+)",  # "Model 1: AdaBoostClassifier"
+]
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def get_job_log_file(job_id: str) -> Path:
+    """Get path to job log file"""
+    return LOGS_DIR / f"{job_id}.log"
+
+def save_log_line(job_id: str, log_line: str):
+    """Save log line to file"""
+    log_file = get_job_log_file(job_id)
+    with open(log_file, 'a') as f:
+        f.write(log_line + '\n')
+
+def extract_algorithm_name(log_line: str) -> str:
+    """Extract algorithm name from log line"""
+    for pattern in ALGORITHM_PATTERNS:
+        match = re.search(pattern, log_line)
+        if match:
+            return match.group(1)
+    return None
+
+def read_job_logs(job_id: str) -> list:
+    """Read all logs for a job"""
+    log_file = get_job_log_file(job_id)
+    if not log_file.exists():
+        return []
+
+    with open(log_file, 'r') as f:
+        return [line.strip() for line in f.readlines()]
+
+def get_current_algorithm(logs: list) -> str:
+    """Extract current running algorithm from logs"""
+    if not logs:
+        return None
+
+    # Get last 10 logs and find algorithm
+    for log in reversed(logs[-10:]):
+        algorithm = extract_algorithm_name(log)
+        if algorithm:
+            return algorithm
+
+    return None
+
+# ============================================================================
+# REST ENDPOINTS
+# ============================================================================
+
+@router.get("/jobs/{job_id}")
+async def get_job_details(job_id: str, db: Session = Depends(get_db)):
+    """Get job details including live logs and current algorithm"""
+
+    try:
+        # Get job from database
+        job = db_manager.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Get logs
+        logs = read_job_logs(job_id)
+
+        # Get current algorithm
+        current_algorithm = get_current_algorithm(logs)
+
+        # Get total lines
+        total_logs = len(logs)
+
+        # Return job with live data
+        return {
+            "id": job.id,
+            "pipeline_name": job.pipeline_name,
+            "status": job.status,
+            "created_at": job.created_at.isoformat(),
+            "updated_at": job.updated_at.isoformat(),
+            "parameters": json.loads(job.parameters) if job.parameters else {},
+            "result": json.loads(job.result) if job.result else {},
+            "logs": {
+                "total_lines": total_logs,
+                "recent_logs": logs[-20:],  # Last 20 logs
+                "current_algorithm": current_algorithm
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting job details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
