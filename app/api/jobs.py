@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from pathlib import Path
 import os
+import re  # ← ADD THIS LINE!
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 LOGS_DIR = Path("data/job_logs")
@@ -722,7 +723,7 @@ def get_current_algorithm(logs: list) -> str:
 # REST ENDPOINTS
 # ============================================================================
 
-@router.get("/jobs/logs/{job_id}")
+@router.get("/logs/{job_id}")
 async def get_job_details(job_id: str, db: Session = Depends(get_db)):
     """Get job details including live logs and current algorithm"""
 
