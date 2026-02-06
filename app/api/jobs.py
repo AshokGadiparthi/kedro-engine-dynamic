@@ -38,6 +38,55 @@ db_manager = JobManager()
 router = APIRouter(tags=["jobs"])
 logger.info("✅ Jobs router created")
 
+# List of words that are NOT algorithms (false positives)
+FALSE_POSITIVE_WORDS = {
+    'ensemble',
+    'voting',
+    'results',
+    'models',
+    'analysis',
+    'data',
+    'node',
+    'model',
+    'curves',
+    'testing',
+    'visualization',
+    'report',
+    'status',
+    'output',
+    'input',
+    'output',
+    'features',
+    'scaling',
+    'tuning',
+}
+
+# Real ML algorithm names to match against
+VALID_ALGORITHMS = {
+    'LogisticRegression',
+    'RidgeClassifier',
+    'SGDClassifier',
+    'PassiveAggressiveClassifier',
+    'Perceptron',
+    'DecisionTreeClassifier',
+    'RandomForestClassifier',
+    'ExtraTreesClassifier',
+    'GradientBoostingClassifier',
+    'AdaBoostClassifier',
+    'BaggingClassifier',
+    'LinearSVC',
+    'GaussianNB',
+    'MultinomialNB',
+    'BernoulliNB',
+    'ComplementNB',
+    'CategoricalNB',
+    'KNeighborsClassifier',
+    'SVC',
+    'KMeans',
+    'DBSCAN',
+    'IsolationForest',
+}
+
 # ============================================================================
 # PYDANTIC MODELS
 # ============================================================================
@@ -135,63 +184,68 @@ def build_job_parameters(
 
 def get_currently_running_algorithm(logs: list) -> Optional[str]:
     """
-    Detect the CURRENTLY RUNNING algorithm
+    Detect the CURRENTLY RUNNING algorithm with better accuracy
 
     Logic:
-    - Look for "Training ALGO..." logs
-    - Check if it has a completion line "✅ ALGO: Train=..."
-    - If no completion, it's CURRENTLY RUNNING
+    1. Find "Training ALGO..." logs (exact format)
+    2. Check if algorithm is in VALID_ALGORITHMS list
+    3. Check if it has a completion line "✅ ALGO: Train="
+    4. If no completion, it's CURRENTLY RUNNING
+
+    ✅ Filters out false positives like "ensemble", "voting", etc.
     """
     if not logs:
         return None
 
-    # Patterns
+    # Patterns for actual training logs
     training_pattern = r"Training\s+(\w+)\.\.\."
     completion_pattern = r"✅\s+(\w+):\s+Train="
 
-    # Get all trained algorithms (with checkmarks)
+    # Get all completed algorithms
     completed_algos = set()
     for log in logs:
         match = re.search(completion_pattern, log)
         if match:
-            completed_algos.add(match.group(1))
+            algo = match.group(1)
+            if algo in VALID_ALGORITHMS:  # ✅ Only trust valid algorithms
+                completed_algos.add(algo)
 
-    # Get all training starts (reverse order to find most recent)
+    # Search in REVERSE (newest logs first) for incomplete training
     for log in reversed(logs):
         match = re.search(training_pattern, log)
         if match:
             algo = match.group(1)
-            # If this algorithm is NOT in completed list, it's currently running!
+
+            # ✅ Validate: Is it a real algorithm?
+            if algo not in VALID_ALGORITHMS:
+                continue  # Skip false positives like "ensemble"
+
+            # ✅ Is it NOT in completed list?
             if algo not in completed_algos:
-                return algo
+                return algo  # Found it!
 
     return None
 
 def get_all_algorithms_status(logs: list) -> dict:
     """
-    Get status of all algorithms: running, completed, failed
-
-    Returns:
-    {
-        "currently_running": "LogisticRegression" or None,
-        "completed": ["LogisticRegression", "RidgeClassifier", ...],
-        "failed": ["MultinomialNB", ...],
-        "total": 18
-    }
+    Get status of all algorithms with better filtering
     """
     if not logs:
         return {
             "currently_running": None,
             "completed": [],
             "failed": [],
-            "total": 0
+            "total": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "progress_percent": 0.0
         }
 
     training_pattern = r"Training\s+(\w+)\.\.\."
     completion_pattern = r"✅\s+(\w+):\s+Train="
     failure_pattern = r"❌\s+(\w+)\s+failed"
 
-    # Collect all algorithms
+    # Collect all data
     all_algos = set()
     completed = []
     failed = []
@@ -200,32 +254,39 @@ def get_all_algorithms_status(logs: list) -> dict:
         # Get all training attempts
         match = re.search(training_pattern, log)
         if match:
-            all_algos.add(match.group(1))
+            algo = match.group(1)
+            if algo in VALID_ALGORITHMS:  # ✅ Only track valid algorithms
+                all_algos.add(algo)
 
-        # Get completions (in order)
+        # Get completions (in order, avoid duplicates)
         match = re.search(completion_pattern, log)
         if match:
             algo = match.group(1)
-            if algo not in completed:
+            if algo in VALID_ALGORITHMS and algo not in completed:
                 completed.append(algo)
 
-        # Get failures
+        # Get failures (avoid duplicates)
         match = re.search(failure_pattern, log)
         if match:
             algo = match.group(1)
-            if algo not in failed:
+            if algo in VALID_ALGORITHMS and algo not in failed:
                 failed.append(algo)
 
+    # Get current running algorithm
     currently_running = get_currently_running_algorithm(logs)
+
+    # Calculate progress
+    total_count = len(all_algos)
+    progress_percent = round((len(completed) / total_count * 100) if total_count > 0 else 0, 1)
 
     return {
         "currently_running": currently_running,
         "completed": completed,
         "failed": failed,
-        "total": len(all_algos),
+        "total": total_count,
         "completed_count": len(completed),
         "failed_count": len(failed),
-        "progress_percent": round((len(completed) / len(all_algos) * 100) if all_algos else 0, 1)
+        "progress_percent": progress_percent
     }
 
 
@@ -895,20 +956,19 @@ async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
         logger.error(f"Error getting job details: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================================
+# REST ENDPOINTS
+# ============================================================================
+
 @router.get("/logs/{job_id}/current-algorithm")
 async def get_current_algorithm_status(job_id: str):
     """
-    Get the CURRENTLY RUNNING algorithm
+    Get the CURRENTLY RUNNING algorithm (fixed version)
 
     Endpoint: GET /api/v1/jobs/logs/{job_id}/current-algorithm
 
-    Response:
-    {
-        "job_id": "abc-123",
-        "currently_running": "LogisticRegression",
-        "status": "running",
-        "is_running": true
-    }
+    ✅ Filters out false positives
+    ✅ Only returns real algorithm names
     """
 
     logs = read_job_logs(job_id)
@@ -924,20 +984,12 @@ async def get_current_algorithm_status(job_id: str):
 @router.get("/logs/{job_id}/algorithms-status")
 async def get_algorithms_status(job_id: str):
     """
-    Get complete status of all algorithms
+    Get complete status of all algorithms (fixed version)
 
     Endpoint: GET /api/v1/jobs/logs/{job_id}/algorithms-status
 
-    Response:
-    {
-        "currently_running": "LogisticRegression",
-        "completed": ["LogisticRegression", "RidgeClassifier", ...],
-        "failed": ["MultinomialNB"],
-        "total": 18,
-        "completed_count": 3,
-        "failed_count": 1,
-        "progress_percent": 16.7
-    }
+    ✅ Filters out false positives
+    ✅ Only counts real algorithms
     """
 
     logs = read_job_logs(job_id)
@@ -948,11 +1000,12 @@ async def get_algorithms_status(job_id: str):
 @router.get("/logs/{job_id}/progress")
 async def get_job_progress(job_id: str, db: Session = Depends(get_db)):
     """
-    Get job progress with algorithm details
+    Get job progress with algorithm details (fixed version)
 
     Endpoint: GET /api/v1/jobs/logs/{job_id}/progress
 
-    Perfect for UI progress bar!
+    ✅ Shows correct currently running algorithm
+    ✅ Filters false positives
     """
 
     try:
@@ -973,13 +1026,15 @@ async def get_job_progress(job_id: str, db: Session = Depends(get_db)):
                 "failed_count": algo_status["failed_count"],
                 "total_count": algo_status["total"],
                 "progress_percent": algo_status["progress_percent"],
-                "completed": algo_status["completed"][:5],  # Last 5 completed
+                "completed": algo_status["completed"],
                 "failed": algo_status["failed"]
             },
             "total_logs": len(logs),
             "timestamp": datetime.now().isoformat()
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting job progress: {e}")
+        logger.error(f"Error getting job progress: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
