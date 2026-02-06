@@ -1101,9 +1101,9 @@ def get_phase4_report(top_n: int = Query(default=10, ge=1, le=100)):
       - top_n ranked rows
       - full ranked rows (optional: you can remove if too big)
     """
-    summary_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_summary.json")
-    ranked_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_ranked_report.csv")
-    full_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_report.csv")
+    summary_path =  MODEL_OUTPUT_DIR / "phase4_summary.json"
+    ranked_path = MODEL_OUTPUT_DIR / "phase4_ranked_report.csv"
+    full_path =  MODEL_OUTPUT_DIR / "phase4_report.csv"
 
     summary = read_json_file(summary_path)
     ranked_rows = read_csv_file_as_dicts(ranked_path)
