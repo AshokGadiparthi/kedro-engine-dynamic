@@ -9,7 +9,7 @@ FastAPI endpoints for job management and Kedro pipeline execution
 
 from fastapi import APIRouter, HTTPException, status, WebSocket, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import logging
 from app.tasks import execute_pipeline
@@ -21,6 +21,7 @@ from pathlib import Path
 import os
 import re  # ← ADD THIS LINE!
 import json
+import re
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 LOGS_DIR = Path("data/job_logs")
@@ -130,6 +131,102 @@ def build_job_parameters(
 
     logger.info(f"📦 Final parameters: {final_params}")
     return final_params
+
+
+def get_currently_running_algorithm(logs: list) -> Optional[str]:
+    """
+    Detect the CURRENTLY RUNNING algorithm
+
+    Logic:
+    - Look for "Training ALGO..." logs
+    - Check if it has a completion line "✅ ALGO: Train=..."
+    - If no completion, it's CURRENTLY RUNNING
+    """
+    if not logs:
+        return None
+
+    # Patterns
+    training_pattern = r"Training\s+(\w+)\.\.\."
+    completion_pattern = r"✅\s+(\w+):\s+Train="
+
+    # Get all trained algorithms (with checkmarks)
+    completed_algos = set()
+    for log in logs:
+        match = re.search(completion_pattern, log)
+        if match:
+            completed_algos.add(match.group(1))
+
+    # Get all training starts (reverse order to find most recent)
+    for log in reversed(logs):
+        match = re.search(training_pattern, log)
+        if match:
+            algo = match.group(1)
+            # If this algorithm is NOT in completed list, it's currently running!
+            if algo not in completed_algos:
+                return algo
+
+    return None
+
+def get_all_algorithms_status(logs: list) -> dict:
+    """
+    Get status of all algorithms: running, completed, failed
+
+    Returns:
+    {
+        "currently_running": "LogisticRegression" or None,
+        "completed": ["LogisticRegression", "RidgeClassifier", ...],
+        "failed": ["MultinomialNB", ...],
+        "total": 18
+    }
+    """
+    if not logs:
+        return {
+            "currently_running": None,
+            "completed": [],
+            "failed": [],
+            "total": 0
+        }
+
+    training_pattern = r"Training\s+(\w+)\.\.\."
+    completion_pattern = r"✅\s+(\w+):\s+Train="
+    failure_pattern = r"❌\s+(\w+)\s+failed"
+
+    # Collect all algorithms
+    all_algos = set()
+    completed = []
+    failed = []
+
+    for log in logs:
+        # Get all training attempts
+        match = re.search(training_pattern, log)
+        if match:
+            all_algos.add(match.group(1))
+
+        # Get completions (in order)
+        match = re.search(completion_pattern, log)
+        if match:
+            algo = match.group(1)
+            if algo not in completed:
+                completed.append(algo)
+
+        # Get failures
+        match = re.search(failure_pattern, log)
+        if match:
+            algo = match.group(1)
+            if algo not in failed:
+                failed.append(algo)
+
+    currently_running = get_currently_running_algorithm(logs)
+
+    return {
+        "currently_running": currently_running,
+        "completed": completed,
+        "failed": failed,
+        "total": len(all_algos),
+        "completed_count": len(completed),
+        "failed_count": len(failed),
+        "progress_percent": round((len(completed) / len(all_algos) * 100) if all_algos else 0, 1)
+    }
 
 
 # ============================================================================
@@ -796,4 +893,93 @@ async def get_job_logs(job_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error getting job details: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/logs/{job_id}/current-algorithm")
+async def get_current_algorithm_status(job_id: str):
+    """
+    Get the CURRENTLY RUNNING algorithm
+
+    Endpoint: GET /api/v1/jobs/logs/{job_id}/current-algorithm
+
+    Response:
+    {
+        "job_id": "abc-123",
+        "currently_running": "LogisticRegression",
+        "status": "running",
+        "is_running": true
+    }
+    """
+
+    logs = read_job_logs(job_id)
+    current_algo = get_currently_running_algorithm(logs)
+
+    return {
+        "job_id": job_id,
+        "currently_running": current_algo,
+        "is_running": current_algo is not None,
+        "total_logs": len(logs)
+    }
+
+@router.get("/logs/{job_id}/algorithms-status")
+async def get_algorithms_status(job_id: str):
+    """
+    Get complete status of all algorithms
+
+    Endpoint: GET /api/v1/jobs/logs/{job_id}/algorithms-status
+
+    Response:
+    {
+        "currently_running": "LogisticRegression",
+        "completed": ["LogisticRegression", "RidgeClassifier", ...],
+        "failed": ["MultinomialNB"],
+        "total": 18,
+        "completed_count": 3,
+        "failed_count": 1,
+        "progress_percent": 16.7
+    }
+    """
+
+    logs = read_job_logs(job_id)
+    status = get_all_algorithms_status(logs)
+
+    return status
+
+@router.get("/logs/{job_id}/progress")
+async def get_job_progress(job_id: str, db: Session = Depends(get_db)):
+    """
+    Get job progress with algorithm details
+
+    Endpoint: GET /api/v1/jobs/logs/{job_id}/progress
+
+    Perfect for UI progress bar!
+    """
+
+    try:
+        job = db_manager.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        logs = read_job_logs(job_id)
+        algo_status = get_all_algorithms_status(logs)
+
+        return {
+            "id": get_safe_value(job, 'id', job_id),
+            "pipeline_name": get_safe_value(job, 'pipeline_name'),
+            "status": get_safe_value(job, 'status'),
+            "progress": {
+                "currently_running": algo_status["currently_running"],
+                "completed_count": algo_status["completed_count"],
+                "failed_count": algo_status["failed_count"],
+                "total_count": algo_status["total"],
+                "progress_percent": algo_status["progress_percent"],
+                "completed": algo_status["completed"][:5],  # Last 5 completed
+                "failed": algo_status["failed"]
+            },
+            "total_logs": len(logs),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting job progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
