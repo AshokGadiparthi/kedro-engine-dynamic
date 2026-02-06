@@ -15,6 +15,11 @@ import logging
 from app.tasks import execute_pipeline
 from app.core.job_manager import JobManager
 
+from pathlib import Path
+import os
+
+KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -172,7 +177,7 @@ def run_pipeline(
           -H "Content-Type: application/json" \\
           -d '{"parameters": {"data_loading": {"test_size": 0.25}}}'
     """
-
+    file_path = os.path.join(str(KEDRO_PROJECT_PATH), dataset.file_path)
     logger.info(f"📊 API Request: Run pipeline '{pipeline_name}'")
     logger.info(f"📁 Query filepath: {filepath}")
 
