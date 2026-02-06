@@ -856,15 +856,6 @@ def extract_algorithm_name(log_line: str) -> str:
             return match.group(1)
     return None
 
-def read_job_logs(job_id: str) -> list:
-    """Read all logs for a job"""
-    log_file = get_job_log_file(job_id)
-    if not log_file.exists():
-        return []
-
-    with open(log_file, 'r') as f:
-        return [line.strip() for line in f.readlines()]
-
 def get_current_algorithm(logs: list) -> str:
     """Extract current running algorithm from logs"""
     if not logs:
@@ -878,6 +869,32 @@ def get_current_algorithm(logs: list) -> str:
 
     return None
 
+# ✅ Add these helper functions at the top!
+def get_safe_value(obj, key, default=None):
+    """Get value from dict or object safely"""
+    try:
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        else:
+            return getattr(obj, key, default)
+    except Exception:
+        return default
+
+def format_datetime(dt):
+    """Format datetime to ISO string"""
+    if dt is None:
+        return None
+    if hasattr(dt, 'isoformat'):
+        return dt.isoformat()
+    return str(dt)
+
+def read_job_logs(job_id: str) -> list:
+    """Read all logs for a job"""
+    log_file = LOGS_DIR / f"{job_id}.log"
+    if not log_file.exists():
+        return []
+    with open(log_file, 'r') as f:
+        return [line.strip() for line in f.readlines()]
 # ============================================================================
 # REST ENDPOINTS
 # ============================================================================
