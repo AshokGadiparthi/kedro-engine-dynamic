@@ -602,7 +602,7 @@ def extract_algorithm(log_line: str) -> str:
 
     return None
 
-@router.websocket("/logs/{job_id}/logs")
+@router.websocket("/ws/{job_id}")
 async def websocket_job_logs(websocket: WebSocket, job_id: str):
     """
     WebSocket endpoint for streaming live job logs
