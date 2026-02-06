@@ -7,7 +7,7 @@ FastAPI endpoints for job management and Kedro pipeline execution
 - Supports both upload-to-job workflow and direct filepath submission
 """
 
-from fastapi import APIRouter, HTTPException, status, WebSocket
+from fastapi import APIRouter, HTTPException, status, WebSocket, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
