@@ -154,6 +154,229 @@ async def create_dataset(
         raise HTTPException(status_code=500, detail=f"Failed to upload dataset: {str(e)}")
 
 
+@router.get("/{dataset_id}/columns")
+async def get_dataset_columns(
+        dataset_id: str,
+        db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get all column names from a dataset
+
+    Used for: Dropdown selection in preprocessing, feature engineering, etc.
+
+    Returns:
+    {
+      "dataset_id": "10f47671-d3c4-4194-ac28-1b321fbbf469",
+      "dataset_name": "sample_data",
+      "total_columns": 6,
+      "columns": [
+        {
+          "name": "age",
+          "dtype": "int64",
+          "type": "numeric"
+        },
+        {
+          "name": "income",
+          "dtype": "float64",
+          "type": "numeric"
+        },
+        ...
+      ],
+      "numeric_columns": ["age", "income", ...],
+      "categorical_columns": ["category", ...],
+      "datetime_columns": []
+    }
+    """
+    try:
+        logger.info(f"🔍 Fetching columns for dataset: {dataset_id}")
+
+        # 1. Query dataset from database
+        dataset_record = db.query(Dataset).filter(
+            Dataset.id == dataset_id
+        ).first()
+
+        if not dataset_record:
+            logger.error(f"❌ Dataset not found: {dataset_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset '{dataset_id}' not found"
+            )
+
+        # 2. Get file path from dataset record
+        file_path = None
+
+        # Try multiple attribute names (adapt to your schema)
+        for attr_name in ['kedro_path', 'file_path', 'path', 'filepath']:
+            if hasattr(dataset_record, attr_name):
+                potential_path = getattr(dataset_record, attr_name)
+                if potential_path:
+                    file_path = potential_path
+                    logger.info(f"✅ Found file path in '{attr_name}': {file_path}")
+                    break
+
+        if not file_path:
+            available_attrs = [k for k in dataset_record.__dict__.keys() if not k.startswith('_')]
+            logger.error(f"❌ No file path attribute found")
+            logger.error(f"   Available attributes: {available_attrs}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Cannot determine file path from dataset. Available attributes: {available_attrs}"
+            )
+
+        # 3. Build full path
+        full_file_path = KEDRO_PROJECT_PATH / file_path
+
+        logger.info(f"📂 Reading from: {full_file_path}")
+
+        # 4. Check file exists
+        if not full_file_path.exists():
+            logger.error(f"❌ File not found at: {full_file_path}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset file not found at {full_file_path}"
+            )
+
+        # 5. Read CSV to get columns (only header, not full data)
+        df = pd.read_csv(full_file_path, nrows=0)  # Read only header
+
+        logger.info(f"✅ Successfully read {len(df.columns)} columns")
+
+        # 6. Categorize columns by data type
+        numeric_columns = df.select_dtypes(include=['int64', 'int32', 'float64', 'float32']).columns.tolist()
+        categorical_columns = df.select_dtypes(include=['object', 'string']).columns.tolist()
+        datetime_columns = df.select_dtypes(include=['datetime64']).columns.tolist()
+
+        # 7. Prepare detailed column info
+        columns_info = []
+        for col in df.columns:
+            dtype = str(df[col].dtype)
+
+            if col in numeric_columns:
+                col_type = "numeric"
+            elif col in categorical_columns:
+                col_type = "categorical"
+            elif col in datetime_columns:
+                col_type = "datetime"
+            else:
+                col_type = "other"
+
+            columns_info.append({
+                "name": col,
+                "dtype": dtype,
+                "type": col_type
+            })
+
+        # 8. Return response
+        response = {
+            "dataset_id": dataset_id,
+            "dataset_name": dataset_record.name if hasattr(dataset_record, 'name') else "Unknown",
+            "file_path": str(file_path),
+            "total_columns": len(df.columns),
+            "columns": columns_info,
+            "numeric_columns": numeric_columns,
+            "categorical_columns": categorical_columns,
+            "datetime_columns": datetime_columns,
+            "status": "success"
+        }
+
+        logger.info(f"✅ Returning {len(df.columns)} columns for dataset {dataset_id}")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error fetching columns: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching dataset columns: {str(e)}"
+        )
+
+
+@router.get("/{dataset_id}/info")
+async def get_dataset_info(
+        dataset_id: str,
+        db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get detailed dataset information (columns + statistics)
+
+    Returns: All column info plus shape, memory, missing values, etc.
+    """
+    try:
+        logger.info(f"📊 Fetching detailed info for dataset: {dataset_id}")
+
+        # Get columns first
+        dataset_record = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+        if not dataset_record:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}")
+
+        # Get file path
+        file_path = None
+        for attr_name in ['kedro_path', 'file_path', 'path', 'filepath']:
+            if hasattr(dataset_record, attr_name):
+                potential_path = getattr(dataset_record, attr_name)
+                if potential_path:
+                    file_path = potential_path
+                    break
+
+        if not file_path:
+            raise HTTPException(status_code=500, detail="Cannot determine file path")
+
+        full_file_path = KEDRO_PROJECT_PATH / file_path
+
+        # Read full data for statistics
+        df = pd.read_csv(full_file_path)
+
+        # Calculate statistics
+        stats = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "memory_mb": round(df.memory_usage(deep=True).sum() / 1024**2, 2),
+            "missing_values": int(df.isnull().sum().sum()),
+            "missing_percentage": round((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100, 2),
+            "duplicates": len(df) - len(df.drop_duplicates()),
+            "numeric_cols": len(df.select_dtypes(include=['int64', 'int32', 'float64', 'float32']).columns),
+            "categorical_cols": len(df.select_dtypes(include=['object', 'string']).columns),
+            "datetime_cols": len(df.select_dtypes(include=['datetime64']).columns)
+        }
+
+        # Column details
+        columns_info = []
+        for col in df.columns:
+            dtype_str = str(df[col].dtype)
+
+            if dtype_str in ['int64', 'int32', 'float64', 'float32']:
+                col_type = "numeric"
+            elif dtype_str in ['object', 'string']:
+                col_type = "categorical"
+            elif 'datetime' in dtype_str:
+                col_type = "datetime"
+            else:
+                col_type = "other"
+
+            columns_info.append({
+                "name": col,
+                "dtype": dtype_str,
+                "type": col_type,
+                "missing": int(df[col].isnull().sum()),
+                "unique_values": len(df[col].unique()) if col_type != "numeric" else None
+            })
+
+        return {
+            "dataset_id": dataset_id,
+            "dataset_name": dataset_record.name if hasattr(dataset_record, 'name') else "Unknown",
+            "file_path": str(file_path),
+            "statistics": stats,
+            "columns": columns_info,
+            "status": "success"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error fetching dataset info: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @router.get("/{dataset_id}/preview")
 async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: Session = Depends(get_db)):
