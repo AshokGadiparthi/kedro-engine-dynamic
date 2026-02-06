@@ -224,7 +224,8 @@ async def get_dataset_columns(
             )
 
         # 3. Build full path
-        full_file_path = KEDRO_PROJECT_PATH / file_path
+        full_file_path = os.path.join(str(KEDRO_PROJECT_PATH), file_path)
+
 
         logger.info(f"📂 Reading from: {full_file_path}")
 
@@ -323,7 +324,7 @@ async def get_dataset_info(
         if not file_path:
             raise HTTPException(status_code=500, detail="Cannot determine file path")
 
-        full_file_path = KEDRO_PROJECT_PATH / file_path
+        full_file_path = os.path.join(str(KEDRO_PROJECT_PATH), file_path)
 
         # Read full data for statistics
         df = pd.read_csv(full_file_path)
