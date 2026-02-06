@@ -713,7 +713,7 @@ def get_current_algorithm(logs: list) -> str:
         return None
 
     # Get last 10 logs and find algorithm
-    for log in reversed(logs[-10:]):
+    for log in reversed(logs):
         algorithm = extract_algorithm_name(log)
         if algorithm:
             return algorithm
