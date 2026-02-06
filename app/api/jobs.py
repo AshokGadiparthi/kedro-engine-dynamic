@@ -7,7 +7,7 @@ FastAPI endpoints for job management and Kedro pipeline execution
 - Supports both upload-to-job workflow and direct filepath submission
 """
 
-from fastapi import APIRouter, HTTPException, status, WebSocket, Depends
+from fastapi import APIRouter, HTTPException, status, WebSocket, Depends, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
@@ -22,6 +22,10 @@ import os
 import re  # ← ADD THIS LINE!
 import json
 import re
+
+from fastapi.responses import FileResponse
+import csv
+from io import StringIO
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 LOGS_DIR = Path("data/job_logs")
