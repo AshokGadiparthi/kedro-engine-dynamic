@@ -25,6 +25,7 @@ import re
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
 LOGS_DIR = Path("data/job_logs")
+MODEL_OUTPUT_DIR = Path("data/07_model_output")
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -289,7 +290,39 @@ def get_all_algorithms_status(logs: list) -> dict:
         "progress_percent": progress_percent
     }
 
+def _safe_resolve_under(base: Path, candidate: Path) -> Path:
+    """
+    Prevent path traversal. Ensures candidate is inside base.
+    """
+    base = base.resolve()
+    cand = candidate.resolve()
+    if base not in cand.parents and base != cand:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return cand
 
+def read_json_file(path: Path) -> dict:
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path.name}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse JSON: {str(e)}")
+
+def read_csv_file_as_dicts(path: Path) -> list:
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path.name}")
+    try:
+        raw = path.read_text(encoding="utf-8")
+        reader = csv.DictReader(StringIO(raw))
+        return list(reader)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse CSV: {str(e)}")
+
+def to_float(x, default=None):
+    try:
+        return float(x)
+    except Exception:
+        return default
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
@@ -1054,3 +1087,46 @@ async def get_job_progress(job_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error getting job progress: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/reports/phase4", tags=["reports"])
+def get_phase4_report(top_n: int = Query(default=10, ge=1, le=100)):
+    """
+    Returns:
+      - summary (json)
+      - best_model details (row)
+      - top_n ranked rows
+      - full ranked rows (optional: you can remove if too big)
+    """
+    summary_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_summary.json")
+    ranked_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_ranked_report.csv")
+    full_path = _safe_resolve_under(MODEL_OUTPUT_DIR, MODEL_OUTPUT_DIR / "phase4_report.csv")
+
+    summary = read_json_file(summary_path)
+    ranked_rows = read_csv_file_as_dicts(ranked_path)
+    full_rows = read_csv_file_as_dicts(full_path)
+
+    # Normalize numeric fields for UI sorting/formatting
+    for r in ranked_rows:
+        r["Train_Score"] = to_float(r.get("Train_Score"))
+        r["Test_Score"] = to_float(r.get("Test_Score"))
+        r["Diff"] = to_float(r.get("Diff"))
+
+    for r in full_rows:
+        r["Train_Score"] = to_float(r.get("Train_Score"))
+        r["Test_Score"] = to_float(r.get("Test_Score"))
+        r["Diff"] = to_float(r.get("Diff"))
+
+    best_model_name = summary.get("best_model")
+    best_row = next((r for r in ranked_rows if r.get("Algorithm") == best_model_name), None)
+
+    return {
+        "summary": summary,
+        "best_model": {
+            "name": best_model_name,
+            "best_score": summary.get("best_score"),
+            "details": best_row
+        },
+        "top_ranked": ranked_rows[:top_n],
+        "ranked": ranked_rows,
+        "full_report": full_rows
+    }
