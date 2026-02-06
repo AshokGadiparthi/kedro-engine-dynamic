@@ -7,7 +7,7 @@ FastAPI endpoints for job management and Kedro pipeline execution
 - Supports both upload-to-job workflow and direct filepath submission
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, WebSocket
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -19,6 +19,7 @@ from pathlib import Path
 import os
 
 KEDRO_PROJECT_PATH = Path("/home/ashok/work/latest/full/kedro-ml-engine-integrated")
+LOGS_DIR = Path("data/job_logs")
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -585,3 +586,78 @@ def get_pipeline_performance():
 
 
 logger.info("✅ Jobs router fully initialized with filepath support")
+
+def extract_algorithm(log_line: str) -> str:
+    """Extract algorithm name from log line"""
+    patterns = [
+        r"Training\s+(\w+)\.\.\.",          # "Training LogisticRegression..."
+        r"✅\s+(\w+):\s+Train=",            # "✅ LogisticRegression: Train=0.8037"
+        r"Model\s+\d+:\s+(\w+)",            # "Model 1: AdaBoostClassifier"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, log_line)
+        if match:
+            return match.group(1)
+
+    return None
+
+@router.websocket("/logs/{job_id}/logs")
+async def websocket_job_logs(websocket: WebSocket, job_id: str):
+    """
+    WebSocket endpoint for streaming live job logs
+
+    Connect: ws://localhost:8000/api/jobs/ws/{job_id}/logs
+
+    Sends:
+    {
+        "type": "log",
+        "message": "Training LogisticRegression...",
+        "algorithm": "LogisticRegression"  // If found
+    }
+    """
+
+    await websocket.accept()
+    logger.info(f"✅ WebSocket connected for job: {job_id}")
+
+    last_line_count = 0
+
+    try:
+        while True:
+            log_file = LOGS_DIR / f"{job_id}.log"
+
+            if log_file.exists():
+                # Read all lines
+                with open(log_file, 'r') as f:
+                    all_lines = f.readlines()
+
+                # Send new lines only
+                for line in all_lines[last_line_count:]:
+                    line = line.strip()
+                    if line:
+                        algorithm = extract_algorithm(line)
+
+                        # Send to client
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": line,
+                            "algorithm": algorithm  # Null if not found
+                        })
+
+                last_line_count = len(all_lines)
+
+            # Poll every 500ms
+            await asyncio.sleep(0.5)
+
+    except Exception as e:
+        logger.error(f"❌ WebSocket error: {e}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e)
+            })
+        except:
+            pass
+
+    finally:
+        logger.info(f"❌ WebSocket disconnected for job: {job_id}")

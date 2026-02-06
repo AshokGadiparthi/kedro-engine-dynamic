@@ -97,9 +97,13 @@ env = os.environ.copy()
 
 @app.task(name='app.tasks.execute_pipeline', bind=True, time_limit=3600, soft_time_limit=3300)
 def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = None):
-    """Execute a Kedro pipeline using subprocess"""
+    """Execute Kedro pipeline with live log streaming"""
 
     job_start_time = datetime.utcnow()
+
+    # ✅ Setup job logging (saves to file for WebSocket to read)
+    log_handler = setup_job_logger(job_id, logger)
+
     logger.info(f"{'='*80}")
     logger.info(f"🚀 STARTING PIPELINE EXECUTION")
     logger.info(f"{'='*80}")
@@ -113,13 +117,13 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         db_manager.update_job_status(job_id, "running")
         logger.info(f"✅ Job {job_id} marked as RUNNING")
 
-        # STEP 2: Verify Kedro project exists
+        # STEP 2: Verify Kedro project
         logger.info(f"\n[STEP 2] Verifying Kedro project...")
         if not KEDRO_PROJECT_PATH.exists():
             raise FileNotFoundError(f"Kedro project not found at {KEDRO_PROJECT_PATH}")
         logger.info(f"✅ Kedro project verified: {KEDRO_PROJECT_PATH}")
 
-        # STEP 2.5: Validate pipeline name
+        # STEP 2.5: Validate pipeline
         logger.info(f"\n[STEP 2.5] Validating pipeline name...")
         if pipeline_name not in VALID_PIPELINES:
             raise ValueError(f"Pipeline '{pipeline_name}' not found. Valid: {', '.join(VALID_PIPELINES)}")
@@ -127,39 +131,34 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
 
         # STEP 3: Prepare parameters
         logger.info(f"\n[STEP 3] Preparing pipeline parameters...")
-        # ✅ IMPORTANT:
-        # Sometimes FastAPI sends the full request body into Celery like:
-        # {"project_id": "p1", "parameters": {...}}
-        # Kedro expects keys like data_loading.filepath (NOT parameters.data_loading.filepath)
         extra_params = parameters or {}
         if isinstance(extra_params, dict) and "parameters" in extra_params:
-            extra_params = extra_params["parameters"]  # ✅ unwrap
+            extra_params = extra_params["parameters"]
 
         if extra_params:
             logger.info(f"📊 Using custom parameters:")
             for key, value in extra_params.items():
                 logger.info(f"   - {key}: {value}")
 
-        # your API is sending: parameters={"data_loading": {"filepath": "..."}}
-        if extra_params and "data_loading" in extra_params and "filepath" in extra_params["data_loading"]:
-            env["RAW_DATA_FILEPATH"] = str(extra_params["data_loading"]["filepath"])
-            logger.info(f"✅ Set RAW_DATA_FILEPATH={env['RAW_DATA_FILEPATH']}")
-
-        # STEP 4: Execute pipeline via subprocess
+        # STEP 4: Execute pipeline
         logger.info(f"\n[STEP 4] Executing pipeline via subprocess...")
 
-        # Build Kedro command
+        env = os.environ.copy()
+        if extra_params and "data_loading" in extra_params:
+            if "filepath" in extra_params["data_loading"]:
+                env["RAW_DATA_FILEPATH"] = str(extra_params["data_loading"]["filepath"])
+                logger.info(f"✅ Set RAW_DATA_FILEPATH={env['RAW_DATA_FILEPATH']}")
+
+        import sys
         python_exe = sys.executable
         cmd = [python_exe, '-m', 'kedro', 'run', '--pipeline', pipeline_name]
 
-        # ✅ FIX: Add parameters with proper formatting
+        # Add parameters if present
         if extra_params:
-            flat_params = flatten_parameters(extra_params)  # ✅ use your helper
+            flat_params = flatten_parameters(extra_params)
             logger.info("📊 Flattened parameters:")
             for k, v in flat_params.items():
                 logger.info(f"   - {k}={v}")
-
-            # ✅ Kedro expects ONE --params with comma-separated values
             params_str = ",".join([f"{k}={v}" for k, v in flat_params.items()])
             cmd.extend(["--params", params_str])
 
@@ -167,25 +166,24 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         logger.info(f"Working directory: {KEDRO_PROJECT_PATH}")
         logger.info(f"{'='*80}")
 
-        # Run Kedro as subprocess
+        # Run Kedro
         try:
             result = subprocess.run(
                 cmd,
                 cwd=str(KEDRO_PROJECT_PATH),
-                env=env,              # ✅ ADD THIS
+                env=env,
                 capture_output=True,
                 text=True,
                 timeout=300,
             )
 
-            # Log output
+            # Log output (will be saved via JobLogHandler)
             if result.stdout:
                 logger.info(f"\n[Kedro Output]")
                 for line in result.stdout.split('\n'):
                     if line.strip():
-                        logger.info(line)
+                        logger.info(line)  # ✅ Logs to file
 
-            # Check for errors
             if result.returncode != 0:
                 logger.error(f"\n[Kedro Error]")
                 if result.stderr:
@@ -199,7 +197,7 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
 
         except subprocess.TimeoutExpired:
             logger.error("❌ Pipeline execution timed out (>5 minutes)")
-            raise TimeoutError("Kedro pipeline execution exceeded 5 minute timeout")
+            raise TimeoutError("Kedro pipeline execution exceeded timeout")
 
         # STEP 5: Prepare result
         logger.info(f"\n[STEP 5] Preparing execution result...")
@@ -213,10 +211,10 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
             "timestamp": job_start_time.isoformat()
         }
 
-        # STEP 6: Store results in database
+        # STEP 6: Store results
         logger.info(f"\n[STEP 6] Storing results in database...")
         db_manager.update_job_results(job_id, result)
-        db_manager.update_job_status(job_id, "completed")  # ← ADD THIS
+        db_manager.update_job_status(job_id, "completed")  # ✅ Update status
         logger.info(f"✅ Results stored for job {job_id}")
 
         # SUCCESS
@@ -231,35 +229,33 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         return result
 
     except Exception as e:
-        # ERROR HANDLING
         logger.error(f"\n{'='*80}")
         logger.error(f"❌ PIPELINE EXECUTION FAILED")
         logger.error(f"{'='*80}")
         logger.error(f"Job ID: {job_id}")
         logger.error(f"Pipeline: {pipeline_name}")
-        logger.error(f"Error Type: {type(e).__name__}")
-        logger.error(f"Error Message: {str(e)}", exc_info=True)
+        logger.error(f"Error: {str(e)}", exc_info=True)
 
         execution_time = (datetime.utcnow() - job_start_time).total_seconds()
         error_result = {
             "status": "failed",
             "pipeline_name": pipeline_name,
-            "error_type": type(e).__name__,
             "error_message": str(e),
             "execution_time": execution_time,
             "timestamp": job_start_time.isoformat()
         }
 
         try:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            db_manager.update_job_error(job_id, error_msg)
-            db_manager.update_job_status(job_id, "failed")  # ← ADD THIS
-            logger.info(f"✅ Error logged to database")
+            db_manager.update_job_error(job_id, str(e))
+            db_manager.update_job_status(job_id, "failed")  # ✅ Update status
         except Exception as log_error:
             logger.error(f"❌ Failed to log error: {log_error}")
 
         return error_result
 
+    finally:
+        # Cleanup
+        logger.removeHandler(log_handler)
 
 # ============================================================================
 # ADDITIONAL TASKS (process_data, analyze_data)
