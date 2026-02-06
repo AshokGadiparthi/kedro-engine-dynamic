@@ -236,6 +236,7 @@ def execute_pipeline(self, job_id: str, pipeline_name: str, parameters: dict = N
         logger.error(f"Job ID: {job_id}")
         logger.error(f"Pipeline: {pipeline_name}")
         logger.error(f"Error: {str(e)}", exc_info=True)
+        db_manager.update_job_status(job_id, "failed")  # ✅ Update status
 
         execution_time = (datetime.utcnow() - job_start_time).total_seconds()
         error_result = {
