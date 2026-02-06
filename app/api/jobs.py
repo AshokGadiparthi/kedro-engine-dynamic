@@ -1105,6 +1105,8 @@ def get_phase4_report(top_n: int = Query(default=10, ge=1, le=100)):
     ranked_path = MODEL_OUTPUT_DIR / "phase4_ranked_report.csv"
     full_path =  MODEL_OUTPUT_DIR / "phase4_report.csv"
 
+    logger.info(summary_path)
+
     summary = read_json_file(summary_path)
     ranked_rows = read_csv_file_as_dicts(ranked_path)
     full_rows = read_csv_file_as_dicts(full_path)
