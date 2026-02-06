@@ -1101,9 +1101,9 @@ def get_phase4_report(top_n: int = Query(default=10, ge=1, le=100)):
       - top_n ranked rows
       - full ranked rows (optional: you can remove if too big)
     """
-    summary_path =  MODEL_OUTPUT_DIR / "phase4_summary.json"
-    ranked_path = MODEL_OUTPUT_DIR / "phase4_ranked_report.csv"
-    full_path =  MODEL_OUTPUT_DIR / "phase4_report.csv"
+    summary_path =  os.path.join(str(KEDRO_PROJECT_PATH), MODEL_OUTPUT_DIR / "phase4_summary.json")
+    ranked_path = os.path.join(str(KEDRO_PROJECT_PATH), MODEL_OUTPUT_DIR / "phase4_ranked_report.csv")
+    full_path =  os.path.join(str(KEDRO_PROJECT_PATH),MODEL_OUTPUT_DIR / "phase4_report.csv")
 
     logger.info(summary_path)
 
