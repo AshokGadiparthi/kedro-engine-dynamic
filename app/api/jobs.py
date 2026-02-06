@@ -14,6 +14,7 @@ from datetime import datetime
 import logging
 from app.tasks import execute_pipeline
 from app.core.job_manager import JobManager
+from app.core.database import get_db
 
 from pathlib import Path
 import os
