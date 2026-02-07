@@ -45,7 +45,8 @@ VALID_PIPELINES = [
     'data_loading', 'data_validation', 'data_cleaning', 'data_processing',
     'feature_engineering', 'model_training', 'algorithms',
     'ensemble', 'ensemble_methods', 'complete_1_6',
-    'all_with_ensemble', 'end_to_end_full','complete_1_6','complete_1_5_6','phase5','phase3_4'
+    'all_with_ensemble', 'end_to_end_full','complete_1_6','complete_1_5_6','phase5',
+    'phase3_4','phase3_pipeline','phase4_pipeline'
 ]
 
 
