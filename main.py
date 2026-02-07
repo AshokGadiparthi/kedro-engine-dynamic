@@ -155,6 +155,13 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Model Evaluation router: {e}")
     evaluation = None
+
+try:
+    from app.api import predictions
+    logger.info("✅ Predictions router imported")
+except ImportError as e:
+    logger.warning(f"⚠️  Predictions router: {e}")
+    predictions = None
 # ============================================================================
 # APPLICATION LIFECYCLE
 # ============================================================================
@@ -314,6 +321,9 @@ if evaluation:
     logger.info("✅ Model Evaluation router included")
 
 
+if predictions:
+    app.include_router(predictions.router, prefix="/api/v1/predictions", tags=["Predictions"])
+    logger.info("✅ Predictions router included")
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
