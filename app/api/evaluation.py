@@ -25,6 +25,7 @@ Routes:
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import logging
+from app.core.model_evaluation_service import get_evaluation_service, _sanitize_for_json
 
 from app.core.model_evaluation_service import get_evaluation_service
 from app.schemas.evaluation_schemas import (
@@ -65,7 +66,7 @@ async def list_trained_models():
     try:
         service = get_evaluation_service()
         result = service.list_trained_models()
-        return result
+        return _sanitize_for_json(result)
     except Exception as e:
         logger.error(f"Error listing trained models: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list trained models: {str(e)}")
@@ -215,7 +216,7 @@ async def get_threshold_evaluation(
         if result is None:
             raise HTTPException(status_code=422, detail="Cannot compute metrics: model artifacts missing")
 
-        return result
+        return _sanitize_for_json(result)
 
     except HTTPException:
         raise
@@ -243,7 +244,7 @@ async def get_business_impact(
         if result is None:
             raise HTTPException(status_code=422, detail="Cannot compute business impact: model artifacts missing")
 
-        return result
+        return _sanitize_for_json(result)
 
     except HTTPException:
         raise
@@ -262,10 +263,10 @@ async def get_curves(model_id: str):
         curves = service.compute_curves(model_id=model_id)
         optimal = service.compute_optimal_threshold(model_id=model_id)
 
-        return {
+        return _sanitize_for_json({
             "curves": curves,
             "optimalThreshold": optimal,
-        }
+        })
 
     except Exception as e:
         logger.error(f"Error computing curves: {e}", exc_info=True)
@@ -282,10 +283,10 @@ async def get_advanced_analysis(model_id: str):
         learning = service.compute_learning_curve(model_id=model_id)
         features = service.compute_feature_importance(model_id=model_id)
 
-        return {
+        return _sanitize_for_json({
             "learningCurve": learning,
             "featureImportance": features,
-        }
+        })
 
     except Exception as e:
         logger.error(f"Error computing advanced analysis: {e}", exc_info=True)
@@ -303,7 +304,7 @@ async def get_production_readiness(
     try:
         service = get_evaluation_service()
         result = service.compute_production_readiness(threshold, model_id=model_id)
-        return result
+        return _sanitize_for_json(result)
 
     except Exception as e:
         logger.error(f"Error computing production readiness: {e}", exc_info=True)
