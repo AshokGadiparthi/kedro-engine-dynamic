@@ -16,7 +16,8 @@ from app.core.database import engine, Base, init_db
 from app.models.models import (
     User, Workspace, Project, Dataset, Activity,
     Datasource, Model, Job,  # ← Must include Job!
-    EdaResult, EDASummary, EDAStatistics, EDAQuality, EDACorrelations
+    EdaResult, EDASummary, EDAStatistics, EDAQuality, EDACorrelations,
+    RegisteredModel, ModelVersion, ModelArtifact,  # ← Model Registry tables
 )
 
 Base.metadata.create_all(bind=engine)  # Creates all registered models
@@ -141,6 +142,12 @@ except ImportError as e:
     logger.warning(f"⚠️  phase3_correlations_endpoints router: {e}")
     phase3_correlations_endpoints = None
 
+try:
+    from app.api import registry as model_registry
+    logger.info("✅ Model Registry router imported")
+except ImportError as e:
+    logger.warning(f"⚠️  Model Registry router: {e}")
+    model_registry = None
 # ============================================================================
 # APPLICATION LIFECYCLE
 # ============================================================================
@@ -290,6 +297,10 @@ if jobs:
 if phase3_correlations_endpoints:
     app.include_router(phase3_correlations_endpoints.router, prefix="/api/eda", tags=["Phase3"])
     logger.info("✅ Pipelines router included")
+
+if model_registry:
+    app.include_router(model_registry.router, prefix="/api/v1/models/registry", tags=["Model Registry"])
+    logger.info("✅ Model Registry router included")
 
 # ============================================================================
 # ENTRY POINT
