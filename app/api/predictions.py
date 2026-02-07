@@ -29,7 +29,7 @@ from typing import Optional
 import io
 import logging
 
-from app.services.prediction_service import get_prediction_service
+from app.core.prediction_service import get_prediction_service
 from app.schemas.prediction_schemas import PredictionRequest
 
 logger = logging.getLogger(__name__)
