@@ -28,6 +28,7 @@ from typing import Dict, Any, Optional, Tuple, List
 
 import numpy as np
 import pandas as pd
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,26 @@ KEDRO_PROJECT_PATH = Path(os.getenv(
     '/home/ashok/work/latest/full/kedro-ml-engine-integrated'
 ))
 
+def _sanitize_for_json(obj):
+    """Replace inf, -inf, nan with None so JSON serialization works."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    elif isinstance(obj, float):
+        if math.isinf(obj) or math.isnan(obj):
+            return None
+        return obj
+    elif isinstance(obj, (np.floating,)):
+        val = float(obj)
+        if math.isinf(val) or math.isnan(val):
+            return None
+        return val
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return _sanitize_for_json(obj.tolist())
+    return obj
 
 def _resolve(relative_path: str) -> str:
     """Resolve a relative path against KEDRO_PROJECT_PATH."""
@@ -1015,7 +1036,7 @@ class ModelEvaluationService:
                     f"features={result.get('featureImportance') is not None}, "
                     f"production={result.get('productionReadiness') is not None}")
 
-        return result
+        return _sanitize_for_json(result)
 
     # ------------------------------------------------------------------
     # TRAINED MODELS LIST (for model selector)
