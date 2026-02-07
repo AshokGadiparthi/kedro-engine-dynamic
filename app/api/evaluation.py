@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import logging
 
-from app.services.model_evaluation_service import get_evaluation_service
+from app.core.model_evaluation_service import get_evaluation_service
 from app.schemas.evaluation_schemas import (
     EvaluationRequest,
     CompleteEvaluationResponse,
