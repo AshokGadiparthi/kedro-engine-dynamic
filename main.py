@@ -148,6 +148,13 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Model Registry router: {e}")
     model_registry = None
+
+try:
+    from app.api import evaluation
+    logger.info("✅ Model Evaluation router imported")
+except ImportError as e:
+    logger.warning(f"⚠️  Model Evaluation router: {e}")
+    evaluation = None
 # ============================================================================
 # APPLICATION LIFECYCLE
 # ============================================================================
@@ -301,6 +308,11 @@ if phase3_correlations_endpoints:
 if model_registry:
     app.include_router(model_registry.router, prefix="/api/v1/models/registry", tags=["Model Registry"])
     logger.info("✅ Model Registry router included")
+
+if evaluation:
+    app.include_router(evaluation.router, prefix="/api/v1/evaluation", tags=["Model Evaluation"])
+    logger.info("✅ Model Evaluation router included")
+
 
 # ============================================================================
 # ENTRY POINT
