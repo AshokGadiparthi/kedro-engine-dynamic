@@ -1,8 +1,11 @@
 """Database Models"""
-from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey,Float
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey,Float,Index
 from sqlalchemy.sql import func
 from uuid import uuid4
 from app.core.database import Base
+
+from sqlalchemy.orm import relationship
+from datetime import datetime
 
 class User(Base):
     """User model"""
@@ -194,3 +197,167 @@ class Job(Base):
         return f"<Job {self.id}: {self.pipeline_name} - {self.status}>"
 
 
+# ============================================================================
+# MODEL REGISTRY TABLES
+# ============================================================================
+# Add these imports at the top of models.py:
+#   from sqlalchemy import Index
+#   from sqlalchemy.orm import relationship
+#   from datetime import datetime
+# ============================================================================
+
+class RegisteredModel(Base):
+    """
+    A registered model in the Model Registry.
+    Each project can have multiple registered models.
+    Each registered model can have multiple versions (from retraining).
+    """
+
+    __tablename__ = "registered_models"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Basic Info
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    problem_type = Column(String(50), nullable=True)
+
+    # Current best version info (denormalized for fast listing)
+    current_version = Column(String(20), nullable=True)
+    latest_version = Column(String(20), nullable=True)
+    total_versions = Column(Integer, default=1)
+
+    # Status: draft, staging, production, archived, deprecated
+    status = Column(String(20), default="draft")
+
+    # Best metrics (denormalized from best version)
+    best_accuracy = Column(Float, nullable=True)
+    best_algorithm = Column(String(100), nullable=True)
+
+    # Deployment info
+    is_deployed = Column(Boolean, default=False)
+    deployment_url = Column(String(500), nullable=True)
+    deployed_version = Column(String(20), nullable=True)
+    deployed_at = Column(DateTime, nullable=True)
+
+    # Source tracking
+    source_dataset_id = Column(String(36), nullable=True)
+    source_dataset_name = Column(String(255), nullable=True)
+    training_job_id = Column(String(100), nullable=True)
+
+    # Metadata (JSON text for SQLite)
+    tags = Column(Text, nullable=True)
+    labels = Column(Text, nullable=True)
+
+    # Ownership
+    created_by = Column(String(100), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    versions = relationship(
+        "ModelVersion",
+        back_populates="registered_model",
+        cascade="all, delete-orphan",
+        order_by="ModelVersion.version_number.desc()"
+    )
+
+    __table_args__ = (
+        Index("ix_registered_models_project_status", "project_id", "status"),
+    )
+
+    def __repr__(self):
+        return f"<RegisteredModel(id={self.id}, name={self.name}, status={self.status})>"
+
+
+class ModelVersion(Base):
+    """
+    A specific version of a registered model.
+    Each training run (job) can produce one version.
+    """
+
+    __tablename__ = "model_versions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    model_id = Column(String(36), ForeignKey("registered_models.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Version info
+    version = Column(String(20), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    is_current = Column(Boolean, default=False)
+
+    # Status: draft, staging, production, archived
+    status = Column(String(20), default="draft")
+
+    # Algorithm info
+    algorithm = Column(String(100), nullable=True)
+
+    # Metrics
+    accuracy = Column(Float, nullable=True)
+    precision = Column(Float, nullable=True)
+    recall = Column(Float, nullable=True)
+    f1_score = Column(Float, nullable=True)
+    train_score = Column(Float, nullable=True)
+    test_score = Column(Float, nullable=True)
+    roc_auc = Column(Float, nullable=True)
+
+    # Training info
+    job_id = Column(String(100), nullable=True)
+    training_time_seconds = Column(Float, nullable=True)
+    model_size_mb = Column(Float, nullable=True)
+
+    # Configuration (JSON text for SQLite)
+    hyperparameters = Column(Text, nullable=True)
+    feature_names = Column(Text, nullable=True)
+    feature_importances = Column(Text, nullable=True)
+    confusion_matrix = Column(Text, nullable=True)
+    training_config = Column(Text, nullable=True)
+
+    # Metadata
+    tags = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    created_by = Column(String(100), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    registered_model = relationship("RegisteredModel", back_populates="versions")
+    artifacts = relationship("ModelArtifact", back_populates="model_version", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_model_versions_model_current", "model_id", "is_current"),
+    )
+
+    def __repr__(self):
+        return f"<ModelVersion(model_id={self.model_id}, version={self.version}, algo={self.algorithm})>"
+
+
+class ModelArtifact(Base):
+    """
+    A file artifact associated with a model version.
+    Types: model (.pkl), scaler (.pkl), plot (.png), report (.json/.csv)
+    """
+
+    __tablename__ = "model_artifacts"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    model_version_id = Column(String(36), ForeignKey("model_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Artifact info
+    artifact_name = Column(String(255), nullable=False)
+    artifact_type = Column(String(50), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    model_version = relationship("ModelVersion", back_populates="artifacts")
+
+    def __repr__(self):
+        return f"<ModelArtifact(name={self.artifact_name}, type={self.artifact_type})>"
