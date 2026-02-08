@@ -396,19 +396,23 @@ async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: 
         dataset.file_name
     )
 
+    df_full = None
+    MAX_CACHE_ROWS = 1000  # or higher if you want
+
     # Load from cache or file
     if dataset_id in dataset_cache:
-        df = dataset_cache[dataset_id]
+        df_full = dataset_cache[dataset_id]
     else:
         if os.path.exists(file_path):
             try:
-                df = pd.read_csv(file_path, nrows=rows)
-                dataset_cache[dataset_id] = df
-                logger.info(f"✅ Loaded dataset preview: {dataset_id}")
+                df_full = pd.read_csv(file_path, nrows=MAX_CACHE_ROWS)
+                dataset_cache[dataset_id] = df_full
+                logger.info(f"✅ Cached dataset preview base: {dataset_id} rows={len(df_full)}")
             except Exception as e:
                 logger.error(f"❌ Could not read file: {str(e)}")
                 return {"error": f"Could not read file: {str(e)}"}
 
+    df = df_full.head(rows)
     if df is None or df.empty:
         return {"error": "No data available"}
 
