@@ -421,7 +421,8 @@ async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: 
     ]
 
     # Format rows
-    rows_data = df.to_dict('records')
+    # ✅ After — NaN → None (valid JSON null)
+    rows_data = df.where(df.notna(), None).to_dict('records')
 
     return {
         "dataset_id": dataset_id,
