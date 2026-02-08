@@ -54,8 +54,10 @@ AGG_FUNC_MAP = {
     "min": "min",
     "count": "count",
     "unique_count": "nunique",
+    "nunique": "nunique",           # Frontend sends this directly
     "std": "std",
     "variance": "var",
+    "var": "var",                   # Frontend sends this directly
     "first": "first",
     "last": "last",
 }

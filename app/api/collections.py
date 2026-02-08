@@ -126,6 +126,17 @@ def _format_dt(dt) -> Optional[str]:
     return None
 
 
+def _get_file_size(file_path: Optional[str]) -> Optional[int]:
+    """Get file size in bytes, returns None if file doesn't exist."""
+    if not file_path:
+        return None
+    try:
+        abs_path = _resolve_file_path(file_path)
+        return os.path.getsize(abs_path) if os.path.exists(abs_path) else None
+    except (OSError, TypeError):
+        return None
+
+
 def _parse_columns(metadata_json: Optional[str]) -> List[dict]:
     if not metadata_json:
         return []
@@ -449,6 +460,7 @@ async def get_collection(collection_id: str, db: Session = Depends(get_db)):
         "aggregations": [_build_aggregation_response(a, db) for a in aggregations],
         "merged_dataset_id": coll.merged_dataset_id,
         "merged_file_path": coll.merged_file_path,
+        "merged_file_size_bytes": _get_file_size(coll.merged_file_path),
         "rows_before_merge": coll.rows_before_merge,
         "rows_after_merge": coll.rows_after_merge,
         "columns_after_merge": coll.columns_after_merge,
@@ -1378,6 +1390,7 @@ async def process_collection(
             "tables_joined": result.get("tables_joined"),
             "duration_seconds": result.get("duration_seconds"),
             "output_columns": result.get("column_names", []),
+            "merged_file_size_bytes": _get_file_size(kedro_output_path),
         }
 
     except Exception as e:

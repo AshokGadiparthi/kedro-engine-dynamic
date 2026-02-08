@@ -56,8 +56,10 @@ class AggFunction(str, Enum):
     MIN = "min"
     COUNT = "count"
     UNIQUE_COUNT = "unique_count"
+    NUNIQUE = "nunique"            # Frontend alias for unique_count
     STD = "std"
     VARIANCE = "variance"
+    VAR = "var"                    # Frontend alias for variance
     FIRST = "first"
     LAST = "last"
     MODE = "mode"
