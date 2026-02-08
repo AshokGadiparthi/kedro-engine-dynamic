@@ -52,10 +52,10 @@ import pandas as pd
 
 from app.core.database import get_db
 from app.models.models import Dataset
-from app.models.collection_models import (
+from app.models.models import (
     DatasetCollection, CollectionTable, TableRelationship, TableAggregation
 )
-from app.schemas.collection_schemas import (
+from app.schemas.collection_schema import (
     CreateCollectionRequest, UpdateCollectionRequest,
     CollectionSummary, CollectionDetail, CollectionCreateResponse,
     TableSummary, TableDetail, ColumnInfo,
@@ -67,7 +67,7 @@ from app.schemas.collection_schemas import (
     ReviewSummary, ProcessRequest, ProcessStatusResponse, MergedPreviewResponse,
     CollectionStatus, TableRole, JoinType,
 )
-from app.services.collection_processor import (
+from app.core.collection_processor import (
     introspect_csv, validate_relationship, suggest_relationships,
     compute_aggregation, compute_created_columns, execute_merge_pipeline,
 )
