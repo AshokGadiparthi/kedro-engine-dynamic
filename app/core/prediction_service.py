@@ -119,7 +119,9 @@ class PredictionService:
         if self._best_model:
             logger.info("Loaded best model from Phase 3")
 
-        self._report_df = _load_csv("data/07_model_output/phase4_report.csv") or pd.DataFrame()
+        # ✅ FIXED — explicit None check avoids __bool__() on DataFrame
+        _report = _load_csv("data/07_model_output/phase4_report.csv")
+        self._report_df = _report if _report is not None else pd.DataFrame()
 
         for name in ["encoder", "scaler", "imputer"]:
             artifact = _load_pickle(f"data/06_models/{name}.pkl")
