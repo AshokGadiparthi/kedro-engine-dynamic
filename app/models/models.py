@@ -1,11 +1,12 @@
 """Database Models"""
-from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey,Float,Index
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean,ForeignKey,Float,Index,UniqueConstraint, CheckConstraint
 from sqlalchemy.sql import func
 from uuid import uuid4
 from app.core.database import Base
 
 from sqlalchemy.orm import relationship
 from datetime import datetime
+
 
 class User(Base):
     """User model"""
@@ -361,3 +362,269 @@ class ModelArtifact(Base):
 
     def __repr__(self):
         return f"<ModelArtifact(name={self.artifact_name}, type={self.artifact_type})>"
+
+
+
+
+
+# ============================================================================
+# 1. DATASET COLLECTION  (the "project" that groups related tables)
+# ============================================================================
+
+class DatasetCollection(Base):
+    """
+    A named collection of related CSV files that will be joined
+    into a single ML-ready dataset.
+
+    Lifecycle:  draft → configured → processing → processed | failed
+    """
+    __tablename__ = "dataset_collections"
+
+    # --- Identity ---
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    # --- Wizard State ---
+    status = Column(
+        String(20), nullable=False, default="draft",
+        # draft      = Step 1 done (files uploaded)
+        # configured = Steps 2-4 done (relationships + aggregations set)
+        # processing = "Create & Process" clicked, job running
+        # processed  = Merged dataset created successfully
+        # failed     = Processing error
+    )
+    current_step = Column(Integer, default=1)  # 1-5, tracks wizard progress
+
+    # --- Step 2: Primary Table ---
+    primary_table_id = Column(String(36), nullable=True)  # FK to collection_tables.id
+    target_column = Column(String(255), nullable=True)     # e.g. "TARGET", "income"
+
+    # --- Processing Output ---
+    merged_dataset_id = Column(String(36), nullable=True)   # FK to datasets.id (the output)
+    merged_file_path = Column(String(500), nullable=True)    # Kedro-relative path of merged CSV
+    processing_job_id = Column(String(36), nullable=True)    # FK to jobs.id if async
+    processing_started_at = Column(DateTime, nullable=True)
+    processing_completed_at = Column(DateTime, nullable=True)
+    processing_error = Column(Text, nullable=True)
+    processing_duration_seconds = Column(Float, nullable=True)
+
+    # --- Stats (populated after processing) ---
+    total_tables = Column(Integer, default=0)
+    total_relationships = Column(Integer, default=0)
+    total_aggregations = Column(Integer, default=0)
+    rows_before_merge = Column(Integer, nullable=True)   # primary table rows
+    rows_after_merge = Column(Integer, nullable=True)
+    columns_after_merge = Column(Integer, nullable=True)
+
+    # --- Reproducibility ---
+    config_snapshot = Column(Text, nullable=True)  # Full JSON of wizard config at process time
+
+    # --- Timestamps ---
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # --- Indexes ---
+    __table_args__ = (
+        Index("ix_collection_project_status", "project_id", "status"),
+    )
+
+    def __repr__(self):
+        return f"<Collection(id={self.id}, name={self.name}, status={self.status}, tables={self.total_tables})>"
+
+
+# ============================================================================
+# 2. COLLECTION TABLE  (links a CSV/Dataset to a collection)
+# ============================================================================
+
+class CollectionTable(Base):
+    """
+    One row per CSV file in a collection.
+
+    Each table is also an independent Dataset record — this is just the
+    many-to-many link with collection-specific metadata (role, sort order).
+    """
+    __tablename__ = "collection_tables"
+
+    # --- Identity ---
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    collection_id = Column(
+        String(36),
+        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    dataset_id = Column(String(36), nullable=True, index=True)  # FK to datasets.id (may be null during upload)
+
+    # --- Table Metadata ---
+    table_name = Column(String(255), nullable=False)       # Display name: "application_train"
+    file_name = Column(String(255), nullable=True)          # Original: "application_train.csv"
+    file_path = Column(String(500), nullable=True)          # Kedro path: "data/01_raw/{project}/{file}"
+    role = Column(String(20), nullable=False, default="related")  # "primary" | "related"
+    sort_order = Column(Integer, default=0)                 # Display ordering
+
+    # --- Cached Stats (populated on upload) ---
+    row_count = Column(Integer, nullable=True)
+    column_count = Column(Integer, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+
+    # --- Column Schema (JSON array) ---
+    # [{name: "SK_ID_CURR", dtype: "int64", pandas_type: "INTEGER", nullable: true, unique_count: 307511, sample: [100002, 100003]}, ...]
+    columns_metadata = Column(Text, nullable=True)  # JSON string
+
+    # --- Timestamps ---
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # --- Constraints ---
+    __table_args__ = (
+        UniqueConstraint("collection_id", "table_name", name="uq_collection_table_name"),
+        Index("ix_ctable_collection_role", "collection_id", "role"),
+    )
+
+    def __repr__(self):
+        return f"<CollectionTable(id={self.id}, name={self.table_name}, role={self.role})>"
+
+
+# ============================================================================
+# 3. TABLE RELATIONSHIP  (join definition between two tables)
+# ============================================================================
+
+class TableRelationship(Base):
+    """
+    Defines how two tables connect: which columns to join on, and how.
+
+    Created in Step 3 of the wizard by dragging between table nodes
+    or via the "Create Relationship" dialog.
+    """
+    __tablename__ = "table_relationships"
+
+    # --- Identity ---
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    collection_id = Column(
+        String(36),
+        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+
+    # --- Join Definition ---
+    left_table_id = Column(
+        String(36),
+        ForeignKey("collection_tables.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    right_table_id = Column(
+        String(36),
+        ForeignKey("collection_tables.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    left_column = Column(String(255), nullable=False)    # e.g. "SK_ID_CURR"
+    right_column = Column(String(255), nullable=False)   # e.g. "SK_ID_CURR"
+    join_type = Column(String(10), nullable=False, default="left")
+    # "left" | "inner" | "right" | "full"
+
+    # --- Auto-detected Metadata ---
+    relationship_type = Column(String(20), nullable=True)
+    # "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many"
+    left_column_dtype = Column(String(50), nullable=True)   # "INTEGER", "VARCHAR"
+    right_column_dtype = Column(String(50), nullable=True)
+
+    # --- Validation Stats (populated on create/update) ---
+    is_validated = Column(Boolean, default=False)
+    left_unique_count = Column(Integer, nullable=True)
+    right_unique_count = Column(Integer, nullable=True)
+    match_count = Column(Integer, nullable=True)       # Keys present in both tables
+    match_percentage = Column(Float, nullable=True)    # 0-100
+    orphan_left_count = Column(Integer, nullable=True)  # Keys in left but not right
+    orphan_right_count = Column(Integer, nullable=True) # Keys in right but not left
+
+    # --- Timestamps ---
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # --- Constraints ---
+    __table_args__ = (
+        # Prevent duplicate relationships between same table pair
+        UniqueConstraint(
+            "collection_id", "left_table_id", "right_table_id",
+            "left_column", "right_column",
+            name="uq_relationship_pair"
+        ),
+        CheckConstraint(
+            "left_table_id != right_table_id",
+            name="ck_no_self_join"
+        ),
+        CheckConstraint(
+            "join_type IN ('left', 'inner', 'right', 'full')",
+            name="ck_valid_join_type"
+        ),
+    )
+
+    def __repr__(self):
+        return f"<Relationship({self.left_column} = {self.right_column}, {self.join_type})>"
+
+
+# ============================================================================
+# 4. TABLE AGGREGATION  (how to roll up a detail table before joining)
+# ============================================================================
+
+class TableAggregation(Base):
+    """
+    Defines how to aggregate a related (detail) table before joining
+    it to the primary table.
+
+    Example: bureau table has many rows per SK_ID_CURR.
+    Aggregation: GROUP BY SK_ID_CURR → BUREAU_amount_sum, BUREAU_amount_mean, ...
+
+    Features JSON format:
+    [
+        {
+            "column": "amount",
+            "functions": ["sum", "mean", "max", "min"]
+        },
+        {
+            "column": "status",
+            "functions": ["count", "unique_count"]
+        }
+    ]
+    """
+    __tablename__ = "table_aggregations"
+
+    # --- Identity ---
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    collection_id = Column(
+        String(36),
+        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    source_table_id = Column(
+        String(36),
+        ForeignKey("collection_tables.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # --- Aggregation Config ---
+    group_by_column = Column(String(255), nullable=False)   # The key column: "SK_ID_CURR"
+    column_prefix = Column(String(50), nullable=False)       # "BUREAU_", "CC_BAL_", etc.
+
+    # --- Features (JSON array of {column, functions[]}) ---
+    features = Column(Text, nullable=False)  # JSON string
+    # VALID FUNCTIONS: sum, mean, median, max, min, count, unique_count, std, variance,
+    #                  first, last, mode
+
+    # --- Computed Output (populated on save) ---
+    created_columns = Column(Text, nullable=True)  # JSON array: ["BUREAU_amount_sum", "BUREAU_amount_mean", ...]
+    output_column_count = Column(Integer, nullable=True)
+
+    # --- Timestamps ---
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # --- Constraints ---
+    __table_args__ = (
+        # One aggregation config per source table per collection
+        UniqueConstraint("collection_id", "source_table_id", name="uq_agg_per_table"),
+    )
+
+    def __repr__(self):
+        return f"<Aggregation(table={self.source_table_id}, group_by={self.group_by_column}, prefix={self.column_prefix})>"
+

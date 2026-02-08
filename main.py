@@ -18,6 +18,7 @@ from app.models.models import (
     Datasource, Model, Job,  # ← Must include Job!
     EdaResult, EDASummary, EDAStatistics, EDAQuality, EDACorrelations,
     RegisteredModel, ModelVersion, ModelArtifact,  # ← Model Registry tables
+    DatasetCollection, CollectionTable, TableRelationship, TableAggregation
 )
 
 Base.metadata.create_all(bind=engine)  # Creates all registered models
@@ -162,6 +163,13 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Predictions router: {e}")
     predictions = None
+
+try:
+    from app.api import collections
+    logger.info("✅ Collections router imported")
+except ImportError as e:
+    logger.warning(f"⚠️  Collections router: {e}")
+    collections = None
 # ============================================================================
 # APPLICATION LIFECYCLE
 # ============================================================================
@@ -324,6 +332,10 @@ if evaluation:
 if predictions:
     app.include_router(predictions.router, prefix="/api/v1/predictions", tags=["Predictions"])
     logger.info("✅ Predictions router included")
+
+if collections:
+    app.include_router(collections.router, prefix="/api/v1/collections", tags=["Dataset Collections"])
+    logger.info("✅ Collections router included")
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
