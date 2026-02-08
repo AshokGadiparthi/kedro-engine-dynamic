@@ -12,6 +12,7 @@ import logging
 from app.core.database import get_db
 from app.models.models import Dataset
 from app.schemas import DatasetCreate, DatasetResponse
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -422,7 +423,12 @@ async def get_dataset_preview(dataset_id: str = Path(...), rows: int = 100, db: 
 
     # Format rows
     # ✅ After — NaN → None (valid JSON null)
-    rows_data = df.where(df.notna(), None).to_dict('records')
+    rows_data = []
+    for record in df.to_dict('records'):
+        rows_data.append({
+            k: (None if (isinstance(v, float) and (math.isnan(v) or math.isinf(v))) else v)
+            for k, v in record.items()
+        })
 
     return {
         "dataset_id": dataset_id,
